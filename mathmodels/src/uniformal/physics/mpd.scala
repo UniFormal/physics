@@ -9,6 +9,9 @@ import Units.QEBase._
 import scala.util.parsing.json.JSONObject
 import scala.util.parsing.json.JSONArray
 
+
+import uniformal.physics._
+
 case class Quantity(value: Term, tp: FunType) {
   def times(q: Quantity) = {
     (tp.expr, q.tp.expr) match {
@@ -70,7 +73,6 @@ case class Quantity(value: Term, tp: FunType) {
     vF.apply(value, Context.empty)
     vF.found
   }
-
 }
 
 case class Formula(value: Term)
@@ -242,7 +244,7 @@ case class MPD(quantities: List[QuantityDecl], laws: List[Law]) {
 //import scala.collection.mutable.Map
 
 // an assignment of physical quantities to every quantity declaration
-case class MPDState(value: Map[QuantityDecl, Option[Float]]){
+case class MPDState(value: Map[QuantityDecl, Option[ImpreciseFloat]]){
   /** recompute one quantity using one law and the current values of the other quantities */
   def compute(s: Step): MPDState = {
     // result of applying s.law to current values 
@@ -299,7 +301,7 @@ case class Compose(tactics: List[Tactic]) extends Tactic {
   def check: Boolean = tactics.forall(_.check)
 }
 
-case class Precision(precision: Map[QuantityDecl, Option[Float]]) {
+case class Precision(precision: Map[QuantityDecl, Option[ImpreciseFloat]]) {
   def isWithin(that: Precision): Boolean = that.precision.keys.foldLeft(true){(x, y)=>x && precision(y).get <= that.precision(y).get }
   def abs: Precision = Precision(precision.map(x=>(x._1, Some(x._2.get.abs))))
 }
@@ -336,7 +338,7 @@ class MPDSolver(val mpd: MPD, val initialState: MPDState) {
          var before: MPDState = state
          do{
            // first we compute the next value
-           var next: Float = EvaluateQuantity(fixedpointRule.solution, state.valueNameMap)
+           var next: ImpreciseFloat = EvaluateQuantity(fixedpointRule.solution, state.valueNameMap)
            
            // then we update the state with the new improved value and the other values computed from chaining
            state = MPDState(state.value.map(x=> 
@@ -364,7 +366,7 @@ class MPDSolver(val mpd: MPD, val initialState: MPDState) {
 
 object EvaluateQuantity
 {
-  def apply(quantity: Quantity, vMap: Map[LocalName, Option[Float]]): Float = {
+  def apply(quantity: Quantity, vMap: Map[LocalName, Option[ImpreciseFloat]]): ImpreciseFloat = {
     quantity match { 
       case Quantity(OMA(OMID(path), d1::d2::v1::v2::Nil), ft) if path.name == "QEMul" => 
         EvaluateQuantity(Quantity(v1, ft), vMap) * EvaluateQuantity(Quantity(v2, ft), vMap) 
