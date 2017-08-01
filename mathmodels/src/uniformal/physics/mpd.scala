@@ -6,9 +6,8 @@ import info.mathhub.MitM.Foundation._
 import Units.Units._
 import Units.Dimensions._
 import Units.QEBase._
-import scala.util.parsing.json.JSONObject
-import scala.util.parsing.json.JSONArray
 
+import utils.{JSONObject,JSONArray}
 
 import uniformal.physics._
 
