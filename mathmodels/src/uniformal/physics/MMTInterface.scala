@@ -8,7 +8,7 @@ import symbols._
 
 import info.kwarc.mmt.lf._
 
-import info.mathhub.MitM.Foundation._
+import info.mathhub.lf.MitM.Foundation._
 import Units.Units._
 import Units.Dimensions._
 import Units.QEBase._

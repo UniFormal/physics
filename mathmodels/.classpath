@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <classpath>
 	<classpathentry kind="src" path="src"/>
+	<classpathentry kind="con" path="org.scala-ide.sdt.launching.SCALA_CONTAINER"/>
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
-	<classpathentry combineaccessrules="false" exported="true" kind="src" path="/MitM"/>
-	<classpathentry exported="true" kind="lib" path="/home/aiman/Git/MMT/MMT/deploy/mmt.jar" sourcepath="/home/aiman/Git/MMT/MMT/src"/>
-	<classpathentry kind="lib" path="/mmt-api"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/mmt-api"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/mmt-lf"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/MitM-Foundation"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

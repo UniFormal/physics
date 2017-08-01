@@ -2,14 +2,12 @@ package uniformal.physics
 
 import info.kwarc.mmt.api._
 import objects._
-import info.mathhub.MitM.Foundation._
+import utils._
+
+import info.mathhub.lf.MitM.Foundation._
 import Units.Units._
 import Units.Dimensions._
 import Units.QEBase._
-
-import utils.{JSONObject,JSONArray}
-
-import uniformal.physics._
 
 case class Quantity(value: Term, tp: FunType) {
   def times(q: Quantity) = {
@@ -39,7 +37,7 @@ case class Quantity(value: Term, tp: FunType) {
   
   def equal(q: Quantity): Formula = {
     (tp.expr, q.tp.expr) match {
-       case (QE(d), QE(e)) if d == e => Formula(Logic.eq(d, value, q.value))
+       case (QE(d), QE(e)) if d == e => Formula(Logic._eq(d, value, q.value))
        case _ => throw new scala.MatchError("Error")
     }
   }
@@ -329,11 +327,14 @@ class MPDSolver(val mpd: MPD, val initialState: MPDState) {
            throw new scala.Error("Should be head")
          
          
-         if (state.value(subjectQuantity) == None)
-             state = MPDState(state.value.map(x=> 
+         if (state.value(subjectQuantity).isEmpty) {
+            val newS = state.value.map {x => 
                if (x._1 == subjectQuantity) 
-                 (x._1, Some(i))
-               else x))
+                 (x._1, Some(ImpreciseFloat(i,0,0)))
+               else x
+            }
+            state = MPDState(newS)
+         }
          var before: MPDState = state
          do{
            // first we compute the next value
@@ -363,8 +364,7 @@ class MPDSolver(val mpd: MPD, val initialState: MPDState) {
   }
 }
 
-object EvaluateQuantity
-{
+object EvaluateQuantity {
   def apply(quantity: Quantity, vMap: Map[LocalName, Option[ImpreciseFloat]]): ImpreciseFloat = {
     quantity match { 
       case Quantity(OMA(OMID(path), d1::d2::v1::v2::Nil), ft) if path.name == "QEMul" => 
@@ -381,22 +381,23 @@ object EvaluateQuantity
   }
 }
 
-object RuleToJSON
-{
-  def JSONifyQuantity(quantity: Quantity) : Any = quantity match { 
-    case Quantity(OMA(OMID(path), d1::d2::v1::v2::Nil), ft) => 
-      JSONObject(Map(path.name.toString() -> 
-        JSONArray(List(JSONifyQuantity(Quantity(v1, ft)), JSONifyQuantity(Quantity(v2, ft))))))
-    case Quantity(OMA(OMID(path), d::v1::v2::Nil), ft) if path.name == "QESubtract" => 
-      JSONObject(Map(path.name.toString() -> 
-        JSONArray(List(JSONifyQuantity(Quantity(v1, ft)), JSONifyQuantity(Quantity(v2, ft))))))
-    case Quantity(OMS(path), ft) => path.name.toString()
-    case _ => throw new scala.MatchError("Math Error")
+object RuleToJSON {
+  def JSONifyQuantity(q: Quantity): JSON = doQ(q.value)
+  private def doQ(t: Term): JSON = t match {
+    case OMA(OMID(path), List(d1,d2,v1,v2)) => 
+      JSONObject(
+        path.name.toString -> JSONArray(doQ(v1), doQ(v2))
+      )
+    case OMA(OMID(path), List(d,v1,v2)) if path.name == "QESubtract" => 
+      JSONObject(
+        path.name.toString -> JSONArray(doQ(v1), doQ(v2))
+      )
+    case OMS(path) => JSONString(path.name.toString)
   }
   
   //florian.rabe
-  def apply(r : Rule) : JSONObject = {
-    JSONObject(Map("Equal" -> JSONArray(List(r.solved.name.toString(), JSONifyQuantity(r.solution)))))
+  def apply(r : Rule) = {
+    JSONObject("Equal" -> JSONArray(JSONString(r.solved.name.toString), JSONifyQuantity(r.solution)))
   }
 }
 
