@@ -3,3 +3,4 @@
 *.~
 *.scala#
 *.scala~
+/bin/

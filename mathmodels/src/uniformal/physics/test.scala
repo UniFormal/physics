@@ -3,7 +3,7 @@ package uniformal.physics
 import info.kwarc.mmt.api._
 import objects._
 
-import info.mathhub.MitM.Foundation._
+import info.mathhub.lf.MitM.Foundation._
 import Units.Units._
 import Units.Dimensions._
 import Units.QEBase._
