@@ -15,4 +15,11 @@
 		<nature>org.scala-ide.sdt.core.scalanature</nature>
 		<nature>org.eclipse.jdt.core.javanature</nature>
 	</natures>
+	<linkedResources>
+		<link>
+			<name>scala</name>
+			<type>2</type>
+			<location>/home/aiman/Git/MMTn/content/MathHub/MitM/Foundation/export/scala</location>
+		</link>
+	</linkedResources>
 </projectDescription>

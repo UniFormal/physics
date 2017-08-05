@@ -6,7 +6,7 @@ case class ImpreciseFloat(value: Float, minus: Float, plus: Float){
   def -(rhs: ImpreciseFloat) = ImpreciseFloat(value - rhs.value, minus + rhs.minus, plus + rhs.plus)
   
   def *(rhs: ImpreciseFloat) = ImpreciseFloat(value * rhs.value, 
-      (value * rhs.value)*(relativeMinus+rhs.relativeMinus), 
+      (value * rhs.value)*(relativeMinus+rhs.relativeMinus),  
       (value * rhs.value)*(relativePlus+rhs.relativePlus))
       
   def /(rhs: ImpreciseFloat) = ImpreciseFloat(value / rhs.value, 

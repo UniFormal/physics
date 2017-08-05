@@ -14,7 +14,7 @@ import Units.Dimensions._
 import Units.QEBase._
 
 
-class MPDTool extends ShellExtension("mpd") {
+class MPDTool extends ShellExtension("mpd") { 
    def helpText: String = "This is the MPD Tool."
 
    def run(shell: Shell, args: List[String]) = {
