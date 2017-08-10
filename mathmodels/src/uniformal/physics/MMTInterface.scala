@@ -22,48 +22,68 @@ class MPDTool extends ShellExtension("mpd") {
      controller.handleLine("server on 8080")
 
      val p = Path.parseM(args(0), NamespaceMap.empty)
+     
      val thy = controller.get(p).asInstanceOf[DeclaredTheory]
      
-     //val mpd = toMPD(thy)
-     //println(mpd.toString)
+     // println(thy.toString)
      
-     // turn all constants into QuantityDecls or Laws
-     // then turn the whole theory into an MPD
+     val mpd = toMPD(thy)
+     println(mpd.toString)
      
      true
    }
    
-   def toFormula(t: Term): Formula = ???
-   def toQuantity(t: Term): Quantity = {
-            t match {
-               case OMS(p) => Quantity(OMS(p), ???)
-               case OMV(v) =>
-               case Apply(f,arg) =>
-               case Lambda(x,a,t) =>
-               case Pi(x,a,b) =>
-               case QE(d) => Quantity(t, FunType(Nil, QE(d)))
-             }
-            ???
+   def toFormula(t: Term): Formula = Formula(t)
+   
+   def toQuantity(value: Term, tp: Term): Quantity = Quantity(value, tp)
+   
+   def getRules(formula: Formula): List[Rule] = {
+     formula.value match {
+       case Logic.and(lhs, rhs) => (getRules(toFormula(lhs)) ++ getRules(toFormula(rhs))).distinct
+       case Logic._eq(tp, lhs, rhs) => {
+         val solvedPath = lhs match {
+           case OMS(p) => p
+           case _ => throw new scala.MatchError("Error: LHS of rule should be a constant symbol")
+         }
+         List(Rule(solvedPath, toQuantity(rhs, tp)))
+       }
+       case _ => throw new scala.MatchError("Error")
+     }
    }
-
-   def toQuantityDecl(c: Constant): QuantityDecl = {
+   
+   def toMPDComponent(c: Constant): MPDComponent = {
          c.tp match {
            case None =>
-             println("no type")
+             throw new scala.MatchError("Error: No type assigned to MMT constant: ", c)
+             
            case Some(t) =>
-             println(controller.presenter.asString(t))
+             val FunType(args, ret) = t
+             ret match {
+               case Logic.ded(x) =>
+                 val formula = toFormula(x)
+                 Law(c.parent, c.name, formula, getRules(formula))
+               case QE(d) =>
+                 QuantityDecl(c.parent, c.name, Nil, d)
+             }
          }
-         ???
    }
-   
-   def toLaw(c: Constant): Law = ???
-   
+      
    def toMPD(thy: DeclaredTheory): MPD = {
+     var comps: List[MPDComponent] = Nil
      thy.getDeclarations foreach {
        case c: Constant =>
-         println(c.name)
-       case _ =>
+           comps ::= toMPDComponent(c)
      }
-     ???
+     
+     var laws: List[Law] = Nil
+     var quantityDecls: List[QuantityDecl] = Nil
+     comps foreach { 
+       comp => comp match {
+         case qd if qd.isInstanceOf[QuantityDecl]  => quantityDecls ::= qd.asInstanceOf[QuantityDecl]
+         case law if law.isInstanceOf[Law] => laws ::= law.asInstanceOf[Law]
+         case _ => throw new scala.MatchError("Error")
+       }
+     }
+     MPD(quantityDecls, laws)
    }
 }

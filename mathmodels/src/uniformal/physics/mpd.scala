@@ -10,34 +10,34 @@ import Units.Units._
 import Units.Dimensions._
 import Units.QEBase._
 
-case class Quantity(value: Term, tp: FunType) {
+case class Quantity(value: Term, tp:Term) {
   def times(q: Quantity) = {
-    (tp.expr, q.tp.expr) match {
-       case (QE(d), QE(e)) => Quantity(QEMul(d, e, value, q.value), FunType(Nil, QE(DimTimes(d,e))))
+    (tp, q.tp) match {
+       case (QE(d), QE(e)) => Quantity(QEMul(d, e, value, q.value), QE(DimTimes(d,e)))
        case _ => throw new scala.MatchError("Error")
     }
   }
   def div(q: Quantity) = {
-    (tp.expr, q.tp.expr) match {
-       case (QE(d), QE(e)) => Quantity(QEDiv(d, e, value, q.value), FunType(Nil, QE(DimDiv(d,e))))
+    (tp, q.tp) match {
+       case (QE(d), QE(e)) => Quantity(QEDiv(d, e, value, q.value), QE(DimDiv(d,e)))
        case _ => throw new scala.MatchError("Error")
     }
   }
   def add(q: Quantity) = {
-    (tp.expr, q.tp.expr) match {
-       case (QE(d), QE(e)) if d == e => Quantity(QEAdd(d, value, q.value), FunType(Nil, QE(d)))
+    (tp, q.tp) match {
+       case (QE(d), QE(e)) if d == e => Quantity(QEAdd(d, value, q.value), QE(d))
        case _ => throw new scala.MatchError("Error")
     }
   }
   def sub(q: Quantity) = {
-    (tp.expr, q.tp.expr) match {
-       case (QE(d), QE(e)) if d == e => Quantity(QESubtract(d, value, q.value), FunType(Nil, QE(d)))
+    (tp, q.tp) match {
+       case (QE(d), QE(e)) if d == e => Quantity(QESubtract(d, value, q.value), QE(d))
        case _ => throw new scala.MatchError("Error")
     }
   }
   
   def equal(q: Quantity): Formula = {
-    (tp.expr, q.tp.expr) match {
+    (tp, q.tp) match {
        case (QE(d), QE(e)) if d == e => Formula(Logic._eq(d, value, q.value))
        case _ => throw new scala.MatchError("Error")
     }
@@ -76,18 +76,18 @@ case class Quantity(value: Term, tp: FunType) {
 case class Formula(value: Term)
 
 
-case class FunType(arguments: List[Term], expr: Term)
+abstract class MPDComponent
 
-case class QuantityDecl(parent: MPath, name: LocalName, arguments: List[Term], dim: Term){
+case class QuantityDecl(parent: MPath, name: LocalName, arguments: List[Term], dim: Term) extends MPDComponent {
   def path = parent ? name // '?' forms global name
-  def toQuantity = Quantity(OMS(path), FunType(arguments, QE(dim)))
+  def toQuantity = Quantity(OMS(path), QE(dim))
 }
 
 // A rule is an equation solved for a variable
 case class Rule(solved: GlobalName, solution: Quantity)
 
 // A law is a named container of all rules of an equation/formula
-case class Law(parent: MPath, name: LocalName, formula: Formula, rules: List[Rule]){
+case class Law(parent: MPath, name: LocalName, formula: Formula, rules: List[Rule]) extends MPDComponent{
   def path = parent ? name
   
   lazy val globalNames = {
@@ -105,24 +105,24 @@ case class Law(parent: MPath, name: LocalName, formula: Formula, rules: List[Rul
   def solvableQuantities(qs: List[QuantityDecl]) = qs.filter(rules.map(_.solved) contains _.path)
 }
 
-case class Step(law: Law, quantity: QuantityDecl){
+case class Step(law: Law, quantityDecl: QuantityDecl){
   // a step is function if its law is (for its quantity)
-  def isFunctional = law.isFunctional(quantity.path)
+  def isFunctional = law.isFunctional(quantityDecl.path)
 }
 
 case class BigStep(steps: List[Step]) {
-  def end = steps.last.quantity
+  def end = steps.last.quantityDecl
   
   def noLawUsedTwice: Boolean = (for {x <- steps; y <- steps if x != y} yield x.law.path != y.law.path).foldRight(true){(x,y) => x && y}
   
-  def noQuantityComputedTwice: Boolean = (for {x <- steps; y <- steps if x != y} yield x.quantity.path != y.quantity.path).foldRight(true){(x,y) => x && y}
+  def noQuantityComputedTwice: Boolean = (for {x <- steps; y <- steps if x != y} yield x.quantityDecl.path != y.quantityDecl.path).foldRight(true){(x,y) => x && y}
   
-  def cyclic = !steps.head.law.solvableQuantities(List(steps.last.quantity)).isEmpty
+  def cyclic = !steps.head.law.solvableQuantities(List(steps.last.quantityDecl)).isEmpty
   
   private[this] def subcycleFree = {
     def f(l: List[Step]): Boolean = l match {
       case h::Nil => true
-      case h::t => t.foldRight(true) {(x,y) => x.quantity != h.quantity && y} && f(t)
+      case h::t => t.foldRight(true) {(x,y) => x.quantityDecl != h.quantityDecl && y} && f(t)
       case nil => true
     }
     f(steps) 
@@ -139,10 +139,10 @@ case class BigStep(steps: List[Step]) {
   def isFunctional = steps.map(_.isFunctional).foldRight(true){(x,y) => x && y}
   
   def toRule: Option[Rule] = {
-    val q = steps.last.quantity
+    val q = steps.last.quantityDecl
     val t = steps.foldRight(q.toQuantity) {case (next, sofar) =>
-       val s = next.law.getSolution(next.quantity.path).getOrElse{return None}
-       sofar.substitute(next.quantity.path, s)
+       val s = next.law.getSolution(next.quantityDecl.path).getOrElse{return None}
+       sofar.substitute(next.quantityDecl.path, s)
     }
     Some(Rule(q.path, t))
   }
@@ -161,11 +161,11 @@ case class Cycle(steps: List[Step]) {
     case _ => false
   }
   
-  def breakAt(q: GlobalName): BigStep = BigStep(rotate(steps, Nil, s => s.quantity.path == q))
+  def breakAt(q: GlobalName): BigStep = BigStep(rotate(steps, Nil, s => s.quantityDecl.path == q))
  
   def breakAt(from: GlobalName, to: GlobalName): (BigStep,BigStep) = {
     def splitAt(stepsleft: List[Step], q: GlobalName, r: List[Step]) : (List[Step], List[Step]) = stepsleft match {
-      case h::t if h.quantity.path == q => (h::t, r)
+      case h::t if h.quantityDecl.path == q => (h::t, r)
       case h::t => splitAt(t, q, h::r)
       case Nil => (stepsleft, r)
     }
@@ -177,10 +177,10 @@ case class Cycle(steps: List[Step]) {
   
   //def reverse = Cycle(steps.reverse)
   def reverse = {
-    val newInitialStep = Step(steps.head.law, steps.last.quantity)
-    val reversedStepsPair  = steps.tail.foldLeft((newInitialStep::Nil, steps.head.quantity)) {
+    val newInitialStep = Step(steps.head.law, steps.last.quantityDecl)
+    val reversedStepsPair  = steps.tail.foldLeft((newInitialStep::Nil, steps.head.quantityDecl)) {
       (x, y) => x match {
-        case (a:List[Step], b: QuantityDecl) => (Step(y.law, b)::a, y.quantity)
+        case (a:List[Step], b: QuantityDecl) => (Step(y.law, b)::a, y.quantityDecl)
         case _ => throw new scala.MatchError("Match error!")
       }
     }
@@ -189,15 +189,15 @@ case class Cycle(steps: List[Step]) {
   
   def normalize = {
     val highestQuantityHash = steps.foldLeft(0) {(x, y) => if (x > y.hashCode) x else y.hashCode}
-    Cycle(rotate(steps, Nil, x => x.quantity.hashCode == highestQuantityHash))
+    Cycle(rotate(steps, Nil, x => x.quantityDecl.hashCode == highestQuantityHash))
   }
   
   def toBigStep = BigStep(steps)
 }
 
 // MPDs
-case class MPD(quantities: List[QuantityDecl], laws: List[Law]) {
-  def quantitiesInLaw(l: Law) = quantities.map(_.path) intersect l.globalNames
+case class MPD(quantityDecls: List[QuantityDecl], laws: List[Law]) {
+  def quantitiesInLaw(l: Law) = quantityDecls.map(_.path) intersect l.globalNames
   
   def lawsUsingQuantity(p: GlobalName) = laws.filter(_.uses(p))
   
@@ -210,15 +210,15 @@ case class MPD(quantities: List[QuantityDecl], laws: List[Law]) {
       case Nil => Nil
     }
     
-    val qStart = quantities.headOption.getOrElse(return Nil)
+    val qStart = quantityDecls.headOption.getOrElse(return Nil)
     
     val qLaws = lawsUsingQuantity(qStart.path)
     
     def traverse(q: QuantityDecl, history: List[Step]): Set[BigStep] = {
       val qLaws = lawsUsingQuantity(q.path)
-      for {l <- qLaws ; qd <- l.solvableQuantities(quantities) 
+      for {l <- qLaws ; qd <- l.solvableQuantities(quantityDecls) 
         if q != qd && history != Nil;
-        if history.head.quantity != q} {
+        if history.head.quantityDecl != q} {
         val s = Step(l, qd)
         if (history contains s)
           Set(BigStep(aggregateFrom(history, s))) ++ traverse(qd, s::history)
@@ -246,8 +246,8 @@ case class MPDState(value: Map[QuantityDecl, Option[ImpreciseFloat]]){
   /** recompute one quantity using one law and the current values of the other quantities */
   def compute(s: Step): MPDState = {
     // result of applying s.law to current values 
-    val solution = s.law.rules.find(_.solved == s.quantity.path).getOrElse{throw new scala.Error("Couldn't compute")}.solution
-    MPDState(value + (s.quantity -> Some(EvaluateQuantity(solution, valueNameMap))))   
+    val solution = s.law.rules.find(_.solved == s.quantityDecl.path).getOrElse{throw new scala.Error("Couldn't compute")}.solution
+    MPDState(value + (s.quantityDecl -> Some(EvaluateQuantity(solution, valueNameMap))))   
   }
   
   def compute(p: BigStep) : MPDState = {
@@ -323,7 +323,7 @@ class MPDSolver(val mpd: MPD, val initialState: MPDState) {
          utils.File.write(f, RuleToJSON(fixedpointRule).toString())
          
          // assert
-         val subjectQuantity = p.steps.last.quantity
+         val subjectQuantity = p.steps.last.quantityDecl
          if (subjectQuantity.name != fixedpointRule.solved.name)
            throw new scala.Error("Should be head")
          
@@ -396,7 +396,6 @@ object RuleToJSON {
     case OMS(path) => JSONString(path.name.toString)
   }
   
-  //florian.rabe
   def apply(r : Rule) = {
     JSONObject("Equal" -> JSONArray(JSONString(r.solved.name.toString), JSONifyQuantity(r.solution)))
   }
