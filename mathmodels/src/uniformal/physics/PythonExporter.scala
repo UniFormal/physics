@@ -21,9 +21,9 @@ class PythonExporter extends Exporter {
   def exportTheory(thy: DeclaredTheory, bf: BuildTask) {
      val mpd = mpdtool.toMPD(thy)
      
-     val py = mpd.toString
+     //val py = mpd.toString
      
-     utils.File.write(bf.outFile, py)
+     //utils.File.write(bf.outFile, py)
   }
 
   def exportNamespace(dpath: DPath, bd: BuildTask, namespaces: List[BuildTask], modules: List[BuildTask]) {}

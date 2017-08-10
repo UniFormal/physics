@@ -22,12 +22,11 @@ class MPDTool extends ShellExtension("mpd") {
      controller.handleLine("server on 8080")
 
      val p = Path.parseM(args(0), NamespaceMap.empty)
-     
-     val thy = controller.get(p).asInstanceOf[DeclaredTheory]
+     println(args(0))
      
      // println(thy.toString)
      
-     val mpd = toMPD(thy)
+     val mpd = toMPD(p)
      println(mpd.toString)
      
      true
@@ -64,16 +63,31 @@ class MPDTool extends ShellExtension("mpd") {
                  Law(c.parent, c.name, formula, getRules(formula))
                case QE(d) =>
                  QuantityDecl(c.parent, c.name, Nil, d)
+               case _ =>
+                 println(c)
+                 throw new scala.MatchError("Error")
              }
          }
    }
-      
-   def toMPD(thy: DeclaredTheory): MPD = {
+     
+   def getMPDComponentsFromTheory(thy: DeclaredTheory) : List[MPDComponent] = {
      var comps: List[MPDComponent] = Nil
      thy.getDeclarations foreach {
-       case c: Constant =>
-           comps ::= toMPDComponent(c)
+       case c: Constant => comps ::= toMPDComponent(c)
+       case Include(_, from, _) => 
+         comps ++= getMPDComponentsFromTheory(controller.get(from).asInstanceOf[DeclaredTheory])
+       case _ => throw new scala.MatchError("Error: Unsupported construct for mpd theory")
      }
+     comps
+   }
+   
+   def toMPD(p: MPath): MPD = {
+     val thy = controller.get(p).asInstanceOf[DeclaredTheory]
+     toMPD(thy)
+   }
+   
+   def toMPD(thy: DeclaredTheory): MPD = {
+     val comps: List[MPDComponent] = getMPDComponentsFromTheory(thy)
      
      var laws: List[Law] = Nil
      var quantityDecls: List[QuantityDecl] = Nil
