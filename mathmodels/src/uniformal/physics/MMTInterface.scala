@@ -27,7 +27,7 @@ class MPDTool extends ShellExtension("mpd") {
      // println(thy.toString)
      
      val mpd = toMPD(p)
-     println(mpd.toString)
+     println(mpd.cycles.toString)
      
      true
    }

@@ -90,12 +90,16 @@ case class Rule(solved: GlobalName, solution: Quantity)
 case class Law(parent: MPath, name: LocalName, formula: Formula, rules: List[Rule]) extends MPDComponent{
   def path = parent ? name
   
+  // this method doesn't seem to recurse, so it's useless for now
   lazy val globalNames = {
     formula.value.subobjects.collect {
       case (_,OMS(p)) => p
     }.distinct.toList
   }
-  def uses(g: GlobalName) = globalNames contains g
+  
+  def usedQuantities = rules.map(_.solved)
+  
+  def uses(quantityGlobalName: GlobalName) = usedQuantities contains quantityGlobalName  
     
   def getSolution(q: GlobalName): Option[Quantity] = rules.find(_.solved == q).map(_.solution)
   
@@ -197,14 +201,14 @@ case class Cycle(steps: List[Step]) {
 
 // MPDs
 case class MPD(quantityDecls: List[QuantityDecl], laws: List[Law]) {
-  def quantitiesInLaw(l: Law) = quantityDecls.map(_.path) intersect l.globalNames
+  def quantitiesInLaw(l: Law) = quantityDecls.map(_.path) intersect l.usedQuantities
   
   def lawsUsingQuantity(p: GlobalName) = laws.filter(_.uses(p))
   
   /** all simple cycles of this MPD */
   def cycles: List[Cycle] = {
     
-    def aggregateFrom(stepsleft: List[Step], from: Step) : List[Step] = stepsleft match {
+    def aggregateFrom(stepsleft: List[Step], from: Step) : List[Step] = stepsleft.reverse match {
       case h::t if h == from => h::t
       case h::t => aggregateFrom(t, from)
       case Nil => Nil
@@ -212,29 +216,32 @@ case class MPD(quantityDecls: List[QuantityDecl], laws: List[Law]) {
     
     val qStart = quantityDecls.headOption.getOrElse(return Nil)
     
-    val qLaws = lawsUsingQuantity(qStart.path)
+    val lawStart = lawsUsingQuantity(qStart.path).headOption.getOrElse(return Nil)
     
-    def traverse(q: QuantityDecl, history: List[Step]): Set[BigStep] = {
+    def traverse(q: QuantityDecl, l: Law, history: List[Step]): Set[BigStep] = {
       val qLaws = lawsUsingQuantity(q.path)
-      for {l <- qLaws ; qd <- l.solvableQuantities(quantityDecls) 
-        if q != qd && history != Nil;
-        if history.head.quantityDecl != q} {
-        val s = Step(l, qd)
-        if (history contains s)
-          Set(BigStep(aggregateFrom(history, s))) ++ traverse(qd, s::history)
-        else{
-          traverse(qd, s::history)
+
+      var bigSteps: Set[BigStep] = Set()
+      for {ld <- qLaws ; qd <- ld.solvableQuantities(quantityDecls) if q != qd && l != ld} {
+        if (history != Nil)
+        
+        if (history != Nil && history.head.quantityDecl != qd){
+          val s = Step(ld, qd)
+          if (history contains s){
+            bigSteps ++= Set(BigStep(aggregateFrom(history, s)))
+          }else{
+            bigSteps ++= traverse(qd, ld, s::history)
+          }
+        } else if (history == Nil) {
+          val s = Step(ld, qd)
+          return traverse(qd, ld, s::history)
         }
       }
-      Set()
+      bigSteps
     }
-    // should remove repetitions. 
-    /* idea: give every quantity a numerical id, and rotate all cycles so that
-     * the first element in them is the step with quantity of smallest id
-     * from there, all one has to do is ensure cycles
-     */
     
-    traverse(qStart, Nil).map{x=>Cycle(x.steps).normalize}.toList
+    val cyc = traverse(qStart, lawStart, List(Step(lawStart, qStart))).map{x=>Cycle(x.steps).normalize}.toList
+    cyc
   }
 }
 
