@@ -27,8 +27,8 @@ class MPDTool extends ShellExtension("mpd") {
      // println(thy.toString)
      
      val mpd = toMPD(p)
-     println(mpd.cycles.toString)
-     
+     //println(mpd.cycles.toString)
+     println(mpd.prettyListCycles)
      true
    }
    

@@ -78,7 +78,9 @@ case class Formula(value: Term)
 
 abstract class MPDComponent
 
-case class QuantityDecl(parent: MPath, name: LocalName, arguments: List[Term], dim: Term) extends MPDComponent {
+trait MPDNode;
+
+case class QuantityDecl(parent: MPath, name: LocalName, arguments: List[Term], dim: Term) extends MPDComponent with MPDNode {
   def path = parent ? name // '?' forms global name
   def toQuantity = Quantity(OMS(path), QE(dim))
 }
@@ -87,7 +89,7 @@ case class QuantityDecl(parent: MPath, name: LocalName, arguments: List[Term], d
 case class Rule(solved: GlobalName, solution: Quantity)
 
 // A law is a named container of all rules of an equation/formula
-case class Law(parent: MPath, name: LocalName, formula: Formula, rules: List[Rule]) extends MPDComponent{
+case class Law(parent: MPath, name: LocalName, formula: Formula, rules: List[Rule]) extends MPDComponent with MPDNode{
   def path = parent ? name
   
   // this method doesn't seem to recurse, so it's useless for now
@@ -152,16 +154,17 @@ case class BigStep(steps: List[Step]) {
   }
 }
 
+// Constant -> Law -> (Constant -> Law)+
 case class Cycle(steps: List[Step]) {
   private[this] def rotate(remain: List[Step], over: List[Step], pred: Step => Boolean): List[Step] = remain match {
-    case h::Nil => h::over.reverse
-    case h::t if pred(h) => h::t ++ over
-    case h => h
+    case h::t if pred(h) => h::t ++ (over.reverse)
+    case h::t => rotate(t, h::over, pred)
+    case _ => throw new scala.MatchError("Match error: predicate applies to none")
   }
   
-  // cycles and their reverse are the same (assuming simple operations) 
   override def equals(o: Any) = o match {
-    case Cycle(stps) => this.steps == stps || this.reverse.steps == stps
+  
+    case Cycle(stps) => this.steps == stps
     case _ => false
   }
   
@@ -179,21 +182,29 @@ case class Cycle(steps: List[Step]) {
     }
   }
   
-  //def reverse = Cycle(steps.reverse)
-  def reverse = {
-    val newInitialStep = Step(steps.head.law, steps.last.quantityDecl)
-    val reversedStepsPair  = steps.tail.foldLeft((newInitialStep::Nil, steps.head.quantityDecl)) {
-      (x, y) => x match {
-        case (a:List[Step], b: QuantityDecl) => (Step(y.law, b)::a, y.quantityDecl)
+  // reverse must preserve position of first quantity for proper distinct cycle filtering
+  def reverse: Cycle = {
+    if (steps == Nil)
+      return this 
+    val newInitialStep = Step(steps.last.law, steps.head.quantityDecl)
+    val reversedStepsPair  = steps.tail.foldRight((newInitialStep::Nil, steps.map(_.law).reverse)) {
+      (y, x) => x match {
+        case (a:List[Step], h::b) => (Step(b.head, y.quantityDecl)::a, b)
         case _ => throw new scala.MatchError("Match error!")
       }
     }
     Cycle(reversedStepsPair._1.reverse)
   }
   
-  def normalize = {
-    val highestQuantityHash = steps.foldLeft(0) {(x, y) => if (x > y.hashCode) x else y.hashCode}
+  private def normalizeRot = {
+    val highestQuantityHash = steps.foldLeft(scala.Int.MinValue) {(x, y) => if (x > y.quantityDecl.hashCode) x else y.quantityDecl.hashCode}
     Cycle(rotate(steps, Nil, x => x.quantityDecl.hashCode == highestQuantityHash))
+  }
+  
+  def normalize = {
+    val c1 = this.normalizeRot
+    val c2 = this.reverse.normalizeRot
+    if (c1.hashCode() > c2.hashCode()) c1 else c2
   }
   
   def toBigStep = BigStep(steps)
@@ -205,44 +216,42 @@ case class MPD(quantityDecls: List[QuantityDecl], laws: List[Law]) {
   
   def lawsUsingQuantity(p: GlobalName) = laws.filter(_.uses(p))
   
-  /** all simple cycles of this MPD */
-  def cycles: List[Cycle] = {
+  /** all cycles of this MPD */
+  lazy val cycles: List[Cycle] = {
+    var cycleAgg: List[Cycle] = Nil
     
-    def aggregateFrom(stepsleft: List[Step], from: Step) : List[Step] = stepsleft.reverse match {
-      case h::t if h == from => h::t
-      case h::t => aggregateFrom(t, from)
-      case Nil => Nil
-    }
-    
-    val qStart = quantityDecls.headOption.getOrElse(return Nil)
-    
-    val lawStart = lawsUsingQuantity(qStart.path).headOption.getOrElse(return Nil)
-    
-    def traverse(q: QuantityDecl, l: Law, history: List[Step]): Set[BigStep] = {
-      val qLaws = lawsUsingQuantity(q.path)
-
-      var bigSteps: Set[BigStep] = Set()
-      for {ld <- qLaws ; qd <- ld.solvableQuantities(quantityDecls) if q != qd && l != ld} {
-        if (history != Nil)
-        
-        if (history != Nil && history.head.quantityDecl != qd){
-          val s = Step(ld, qd)
-          if (history contains s){
-            bigSteps ++= Set(BigStep(aggregateFrom(history, s)))
-          }else{
-            bigSteps ++= traverse(qd, ld, s::history)
+    def traverse(hist: List[Step]): Unit = {
+      val start = hist.head
+      for {e <- graph if e.law.path != hist.head.law.path}{
+        if (e.law.uses(hist.head.quantityDecl.path)){
+          if (! (hist contains e)){ // history doesn't contain entire edge: consider adding to history and recursing
+            if (!(hist.map(_.quantityDecl) contains e.quantityDecl)) // but if q is there, edge is partially in; kill it
+                 traverse(e::hist)
+          }else if (hist.length > 2 && e == hist.last){
+            cycleAgg ::= Cycle(hist).normalize
           }
-        } else if (history == Nil) {
-          val s = Step(ld, qd)
-          return traverse(qd, ld, s::history)
         }
       }
-      bigSteps
     }
     
-    val cyc = traverse(qStart, lawStart, List(Step(lawStart, qStart))).map{x=>Cycle(x.steps).normalize}.toList
-    cyc
+    for {e <- graph}{
+      traverse(e::Nil)
+    }
+    
+    cycleAgg.distinct
   }
+  
+  lazy val graph: List[Step] =
+    laws.foldLeft(Nil: List[Step]){
+     (agg, l) => agg ++ l.solvableQuantities(quantityDecls).map(q => Step(l, q))
+    }
+  
+  
+  
+  def prettyListCycles = cycles.map(_.reverse.steps.map(x=>(x.law.name, x.quantityDecl.name)))
+  
+    //List(cycles2(0), cycles2(0).reverse).map(_.steps.map(x=>(x.law.name, x.quantityDecl.name)))
+  
 }
 
 //don't need mutable
