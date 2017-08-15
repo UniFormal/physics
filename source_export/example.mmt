@@ -1,0 +1,44 @@
+namespace http://mathhub.info/MitM/Models ❚
+
+import qe http://mathhub.info/MitM/Foundation/Units ❚
+import fnd http://mathhub.info/MitM/Foundation ❚
+
+// MPDs should use this as a base
+theory MPD : ur:?LF =
+
+
+
+theory 1Cons : qe:?QEBase =
+  u: QE Voltage
+  v: QE Voltage
+  i: QE Current
+  r: QE ElectricalResistance
+  q: QE ElectricCharge
+  t: QE Time
+  c: QE ElectricalCapacitance
+  p: QE Power
+
+
+theory Example : ?MPD =
+	include ?1Cons
+	
+  law1: ⊦ u ≐ r ⋅ i ∧ 
+          r ≐ u / i ∧
+          i ≐ u / r
+          
+  law2: ⊦ q ≐ i ⋅ t ∧ 
+          i ≐ q / t ∧
+          t ≐ q / i
+          
+  law3: ⊦ q ≐ c ⋅ u ∧ 
+          u ≐ q / c ∧
+          c ≐ q / u
+          
+  law4: ⊦ p ≐ i ⋅ u ∧ 
+          i ≐ p / u ∧
+          u ≐ p / i
+          
+  law5: ⊦ p ≐ i ⋅ v ∧ 
+          i ≐ p / v ∧
+          v ≐ p / i
+

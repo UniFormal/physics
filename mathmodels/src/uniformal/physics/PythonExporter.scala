@@ -69,6 +69,7 @@ class PythonExporter extends Exporter {
   private[this] def quantityDeclsPyAttributes(mpd: MPD) = 
     mpd.quantityDecls.map(q => {Map(
         "name" -> s"'${q.name.toString}'",
+        "parent" -> s"'${q.parent.toString}'",
         "path" -> s"'${q.path.toString}'",
         "dimension" -> (q.dim match {
           case OMS(p) => s"'${p.name.toString}'"
@@ -80,6 +81,7 @@ class PythonExporter extends Exporter {
   private[this] def lawsPyAttributes(mpd: MPD) = 
     mpd.laws.map(l => {Map(
         "name" -> s"'${l.name.toString}'",
+        "parent" -> s"'${l.parent.toString}'",
         "path" -> s"'${l.path.toString}'") ++ 
         l.rules.map(makeRulePyLambda(_))
     })
@@ -116,6 +118,8 @@ ${pyIndent(1)}def init_laws(self):
 ${pyIndent(2)}${lawsPyAttributes(mpd).map{
   mp => pyObjectAssignment(s"self.laws[${mp("name")}]", "Law", mp, 2)}.mkString("\n\n"+pyIndent(2))
 }
+
+
 """
     Some(py)
   }
