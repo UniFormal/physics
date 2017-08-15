@@ -20,21 +20,29 @@ class MPDTool extends ShellExtension("mpd") {
    def run(shell: Shell, args: List[String]) = {
      controller.handleLine("log console")
      controller.handleLine("server on 8080")
-
      val p = Path.parseM(args(0), NamespaceMap.empty)
-     println(args(0))
-     
-     // println(thy.toString)
+     //println(args(0))
      
      val mpd = toMPD(p)
-     //println(mpd.cycles.toString)
-     println(mpd.prettyListCycles)
+     println(mpd.get.prettyListCycles)
      true
    }
    
    def toFormula(t: Term): Formula = Formula(t)
    
-   def toQuantity(value: Term, tp: Term): Quantity = Quantity(value, tp)
+   def toQuantity(value: Term, tp: Term): Quantity = value match {
+     case QEMul(d1, d2, v1, v2) => 
+       toQuantity(v1, QE(d1)).times(toQuantity(v2, QE(d2)))
+     case QEDiv(d1, d2, v1, v2)  => 
+       toQuantity(v1, QE(d1)).div(toQuantity(v2, QE(d2)))
+     case QEAdd(d, v1, v2)  => 
+       toQuantity(v1, QE(d)).add(toQuantity(v2, QE(d))) 
+     case QESubtract(d, v1, v2)  => 
+       toQuantity(v1, d).sub(toQuantity(v2, QE(d))) 
+     case OMS(path) => 
+       Quantity(value, tp)
+     case x => throw new scala.MatchError("Undefined term: " + x.toString())
+   }
    
    def getRules(formula: Formula): List[Rule] = {
      formula.value match {
@@ -42,7 +50,7 @@ class MPDTool extends ShellExtension("mpd") {
        case Logic._eq(tp, lhs, rhs) => {
          val solvedPath = lhs match {
            case OMS(p) => p
-           case _ => throw new scala.MatchError("Error: LHS of rule should be a constant symbol")
+           case _ => throw new GeneralError("LHS of rule should be a constant symbol")
          }
          List(Rule(solvedPath, toQuantity(rhs, tp)))
        }
@@ -53,7 +61,7 @@ class MPDTool extends ShellExtension("mpd") {
    def toMPDComponent(c: Constant): MPDComponent = {
          c.tp match {
            case None =>
-             throw new scala.MatchError("Error: No type assigned to MMT constant: ", c)
+             throw new GeneralError("No type assigned to MMT constant: " + c)
              
            case Some(t) =>
              val FunType(args, ret) = t
@@ -76,17 +84,24 @@ class MPDTool extends ShellExtension("mpd") {
        case c: Constant => comps ::= toMPDComponent(c)
        case Include(_, from, _) => 
          comps ++= getMPDComponentsFromTheory(controller.get(from).asInstanceOf[DeclaredTheory])
-       case _ => throw new scala.MatchError("Error: Unsupported construct for mpd theory")
+       case _ => throw new GeneralError("Unsupported construct for mpd theory")
      }
      comps
    }
    
-   def toMPD(p: MPath): MPD = {
+   def toMPD(p: MPath): Option[MPD] = {
      val thy = controller.get(p).asInstanceOf[DeclaredTheory]
-     toMPD(thy)
+     thy.meta match {
+       case Some(x) if x.toString() == "http://mathhub.info/MitM/Models?MPD" => toMPD(thy)
+       case _ => throw new GeneralError("Error: Theory must be a meta theory of http://mathhub.info/MitM/Models?MPD")
+     }
    }
    
-   def toMPD(thy: DeclaredTheory): MPD = {
+   def toMPD(thy: DeclaredTheory): Option[MPD] = {
+     val meta = thy.meta.getOrElse(return None)
+     if (meta.toString() != "http://mathhub.info/MitM/Models?MPD")
+       return None
+     
      val comps: List[MPDComponent] = getMPDComponentsFromTheory(thy)
      
      var laws: List[Law] = Nil
@@ -98,6 +113,6 @@ class MPDTool extends ShellExtension("mpd") {
          case _ => throw new scala.MatchError("Error")
        }
      }
-     MPD(quantityDecls, laws)
+     Some(MPD(thy.parent, thy.name, quantityDecls, laws))
    }
 }

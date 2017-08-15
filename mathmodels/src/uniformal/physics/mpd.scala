@@ -14,7 +14,7 @@ case class Quantity(value: Term, tp:Term) {
   def times(q: Quantity) = {
     (tp, q.tp) match {
        case (QE(d), QE(e)) => Quantity(QEMul(d, e, value, q.value), QE(DimTimes(d,e)))
-       case _ => throw new scala.MatchError("Error")
+       case _ => throw new scala.MatchError("Error times")
     }
   }
   def div(q: Quantity) = {
@@ -55,6 +55,7 @@ case class Quantity(value: Term, tp:Term) {
     Quantity(vR, tp)
   }
   
+  
   private class Finder(path: GlobalName) extends StatelessTraverser {
     var found = false
     def traverse(t: Term)(implicit con : Context, state : State) = t match {
@@ -71,6 +72,7 @@ case class Quantity(value: Term, tp:Term) {
     vF.apply(value, Context.empty)
     vF.found
   }
+  
 }
 
 case class Formula(value: Term)
@@ -211,7 +213,9 @@ case class Cycle(steps: List[Step]) {
 }
 
 // MPDs
-case class MPD(quantityDecls: List[QuantityDecl], laws: List[Law]) {
+case class MPD(parent: DPath, name: LocalName, quantityDecls: List[QuantityDecl], laws: List[Law]) {
+  def path = parent ? name
+  
   def quantitiesInLaw(l: Law) = quantityDecls.map(_.path) intersect l.usedQuantities
   
   def lawsUsingQuantity(p: GlobalName) = laws.filter(_.uses(p))
@@ -383,14 +387,14 @@ class MPDSolver(val mpd: MPD, val initialState: MPDState) {
 
 object EvaluateQuantity {
   def apply(quantity: Quantity, vMap: Map[LocalName, Option[ImpreciseFloat]]): ImpreciseFloat = {
-    quantity match { 
-      case Quantity(OMA(OMID(path), d1::d2::v1::v2::Nil), ft) if path.name == "QEMul" => 
+    quantity match {   
+      case Quantity(QEMul(d1, d2, v1, v2), ft) => 
         EvaluateQuantity(Quantity(v1, ft), vMap) * EvaluateQuantity(Quantity(v2, ft), vMap) 
-      case Quantity(OMA(OMID(path), d1::d2::v1::v2::Nil), ft) if path.name == "QEDiv" => 
+      case Quantity(QEDiv(d1, d2, v1, v2), ft) => 
         EvaluateQuantity(Quantity(v1, ft), vMap) / EvaluateQuantity(Quantity(v2, ft), vMap) 
-      case Quantity(OMA(OMID(path), d::v1::v2::Nil), ft) if path.name == "QEAdd" => 
+      case Quantity(QEAdd(d, v1, v2), ft) => 
         EvaluateQuantity(Quantity(v1, ft), vMap) + EvaluateQuantity(Quantity(v2, ft), vMap)
-      case Quantity(OMA(OMID(path), d::v1::v2::Nil), ft) if path.name == "QESubtract" => 
+      case Quantity(QESubtract(d, v1, v2), ft) => 
         EvaluateQuantity(Quantity(v1, ft), vMap) - EvaluateQuantity(Quantity(v2, ft), vMap)
       case Quantity(OMS(path), ft) if vMap(path.name).get != None => return vMap(path.name).get
       case _ => throw new scala.MatchError("Math Error")
@@ -405,7 +409,7 @@ object RuleToJSON {
       JSONObject(
         path.name.toString -> JSONArray(doQ(v1), doQ(v2))
       )
-    case OMA(OMID(path), List(d,v1,v2)) if path.name == "QESubtract" => 
+    case OMA(OMID(path), List(d,v1,v2)) => 
       JSONObject(
         path.name.toString -> JSONArray(doQ(v1), doQ(v2))
       )
