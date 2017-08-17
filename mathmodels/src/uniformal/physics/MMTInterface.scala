@@ -30,19 +30,7 @@ class MPDTool extends ShellExtension("mpd") {
    
    def toFormula(t: Term): Formula = Formula(t)
    
-   def toQuantity(value: Term, tp: Term): Quantity = value match {
-     case QEMul(d1, d2, v1, v2) => 
-       toQuantity(v1, QE(d1)).times(toQuantity(v2, QE(d2)))
-     case QEDiv(d1, d2, v1, v2)  => 
-       toQuantity(v1, QE(d1)).div(toQuantity(v2, QE(d2)))
-     case QEAdd(d, v1, v2)  => 
-       toQuantity(v1, QE(d)).add(toQuantity(v2, QE(d))) 
-     case QESubtract(d, v1, v2)  => 
-       toQuantity(v1, d).sub(toQuantity(v2, QE(d))) 
-     case OMS(path) => 
-       Quantity(value, tp)
-     case x => throw new scala.MatchError("Undefined term: " + x.toString())
-   }
+   def toQuantity(value: Term, tp: Term): Quantity = Quantity(value, tp)
    
    def getRules(formula: Formula): List[Rule] = {
      formula.value match {
@@ -70,7 +58,8 @@ class MPDTool extends ShellExtension("mpd") {
                  val formula = toFormula(x)
                  Law(c.parent, c.name, formula, getRules(formula))
                case QE(d) =>
-                 QuantityDecl(c.parent, c.name, Nil, d)
+                 val df = c.df.map{t => toQuantity(t, d)}
+                 QuantityDecl(c.parent, c.name, Nil, d, df)
                case _ =>
                  println(c)
                  throw new scala.MatchError("Error")
@@ -102,14 +91,25 @@ class MPDTool extends ShellExtension("mpd") {
      if (meta.toString() != "http://mathhub.info/MitM/Models?MPD")
        return None
      
-     val comps: List[MPDComponent] = getMPDComponentsFromTheory(thy)
+     val comps: List[MPDComponent] = getMPDComponentsFromTheory(thy).reverse
      
      var laws: List[Law] = Nil
      var quantityDecls: List[QuantityDecl] = Nil
      comps foreach { 
        comp => comp match {
          case qd if qd.isInstanceOf[QuantityDecl]  => quantityDecls ::= qd.asInstanceOf[QuantityDecl]
-         case law if law.isInstanceOf[Law] => laws ::= law.asInstanceOf[Law]
+         case law if law.isInstanceOf[Law] => {
+           val newLaw :Law = law.asInstanceOf[Law]
+           val nameSegs = newLaw.name.toString.split("_")
+           if (nameSegs.last.startsWith("rule")){
+             val index = laws.indexWhere{l => l.name.toString() == nameSegs.init.mkString("_")}
+             if (index != -1){
+               val oldl = laws(index)
+               laws = laws.patch(index, Seq(Law(oldl.parent, oldl.name, oldl.formula, oldl.rules ++ newLaw.rules)), 1)
+             }
+           }else
+             laws ::= newLaw
+         }
          case _ => throw new scala.MatchError("Error")
        }
      }
