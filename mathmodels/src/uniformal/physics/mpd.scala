@@ -10,6 +10,12 @@ import Units.Units._
 import Units.Dimensions._
 import Units.QEBase._
 
+/*
+ 
+case class
+ 
+ */
+
 case class Quantity(value: Term, tp:Term) {
   def times(q: Quantity) = {
     (tp, q.tp) match {
@@ -80,9 +86,9 @@ case class Formula(value: Term)
 
 abstract class MPDComponent
 
-trait MPDNode;
+trait MPDNode
 
-case class QuantityDecl(parent: MPath, name: LocalName, arguments: List[Term], dim: Term) extends MPDComponent with MPDNode {
+case class QuantityDecl(parent: MPath, name: LocalName, arguments: List[Term], dim: Term, df: Option[Quantity]) extends MPDComponent with MPDNode {
   def path = parent ? name // '?' forms global name
   def toQuantity = Quantity(OMS(path), QE(dim))
 }

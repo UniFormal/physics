@@ -36,10 +36,10 @@ class PythonExporter extends Exporter {
     out
   }
   
-  private class QuantityPyExpression(state: String, quantity: Quantity) {
+  private class QuantityPyExpression(state: String, quantityValue: Term) {
     var parameters: List[String] = Nil
     
-    val expression = makeQuantityPyExpression(quantity.value)
+    val expression = makeQuantityPyExpression(quantityValue)
     
     private def makeQuantityPyExpression(q : Term): String = q match {
       case QEMul(d1, d2, v1, v2) => 
@@ -63,35 +63,45 @@ class PythonExporter extends Exporter {
     
   }
   
-  private[this] def makeRulePyLambda(state: String, rule: Rule): (String, String) = {
-    val expr = new QuantityPyExpression(state, rule.solution)
-    (rule.solved.name.toString(), 
-        s"lambda $state: ${expr.expression}")
-        //${expr.parameters.tail.foldRight(expr.parameters.head.toString()){(x, y) => x + "," + y}}
+  private def makeExpressionPyLambda(state: String , qexpr: QuantityPyExpression): String = 
+    s"lambda $state: ${qexpr.expression}"
+  
+  private def makeExpressionPyLambda(state: String, value: Term): String = {
+    val expr = new QuantityPyExpression(state, value)
+    makeExpressionPyLambda(state, expr)
   }
   
-  private[this] def quantityDeclsPyAttributes(mpd: MPD) = 
-    mpd.quantityDecls.map(q => {Map(
-        "name" -> s"'${q.name.toString}'",
-        "parent" -> s"'${q.parent.toString}'",
-        "dimension" -> (q.dim match {
-          case OMS(p) => s"'${p.name.toString}'"
-          case _ => "''"
-          })//,
-         //q.df.toList.map{d => "compute" -> ???} :_*
-        )
+  private def getStringListPy(list :List[String]): String =
+    list.mkString("['", "' ,'", "']")
+  
+  private def quantityDeclsPyAttributes(mpd: MPD) = {
+    mpd.quantityDecls.map(q => {
+      val parameters = List(
+          "name" -> s"'${q.name.toString}'",
+          "parent" -> s"'${q.parent.toString}'",
+          "dimension" -> (q.dim match {
+            case OMS(p) => s"'${p.name.toString}'"
+            case _ => "''"
+          })
+      )
+      if (q.df != None)
+        (parameters:+("compute" -> makeExpressionPyLambda("state", q.df.get.value))).toMap
+      else  
+        parameters.toMap
     })
+  }
     
-  private[this] def lawsPyAttributes(mpd: MPD) = 
+  private def lawsPyAttributes(mpd: MPD) = 
     mpd.laws.map(l => {Map(
         "name" -> s"'${l.name.toString}'",
-        "parent" -> s"'${l.parent.toString}'") ++ 
-        l.rules.map(makeRulePyLambda("state", _))
+        "parent" -> s"'${l.parent.toString}'",
+        "variables" -> s"${getStringListPy(l.usedQuantities.map(_.name.toString))}") ++ 
+        l.rules.map(r => (r.solved.name.toString, makeExpressionPyLambda("state", r.solution.value)))
     })
   
   def pyObjectAssignment(lhs: String, objname: String, attrs: Map[String, String], currentIndentLevel: Int): String = {
     s"""$lhs = $objname(
-${pyIndent(currentIndentLevel+1)}${attrs.map(kp => s"${kp._1}= ${kp._2}").mkString(",\n"+pyIndent(currentIndentLevel+1))} 
+${pyIndent(currentIndentLevel+1)}${attrs.map(kp => s"${kp._1} = ${kp._2}").mkString(",\n"+pyIndent(currentIndentLevel+1))} 
 ${pyIndent(currentIndentLevel)})"""
   }
     
@@ -101,6 +111,12 @@ ${pyIndent(currentIndentLevel)})"""
 from mpdbase import *
 
 class MPD_${mpd.name.toString()}(MPDBase):
+${pyIndent(1)}def __init__(self, regions=1):
+${pyIndent(2)}MPDBase.__init__(self, 
+${pyIndent(3)}regions,
+${pyIndent(3)}'${mpd.name.toString}',
+${pyIndent(3)}'${mpd.parent.toString}')
+
 ${pyIndent(1)}def init_quantity_decls(self):
 ${pyIndent(2)}${quantityDeclsPyAttributes(mpd).map{
   mp => pyObjectAssignment(s"self.quantity_decls[${mp("name")}]", "QuantityDecl", mp, 2)}.mkString("\n\n"+pyIndent(2))
@@ -113,8 +129,7 @@ ${pyIndent(2)}${lawsPyAttributes(mpd).map{
 
 
 """
-/**/
-Some(py)
+    Some(py)
   }
   
   def exportTheory(thy: DeclaredTheory, bf: BuildTask) {

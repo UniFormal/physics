@@ -91,7 +91,7 @@ class Law(Declaration):
 	def __str__(self):
 		s = "---Law---\n"
 		s += Declaration.__str__(self) + '\n'
-		s += "variables: " self.variables.join(',') 
+		s += "variables: " + self.variables.join(',') 
 		return s
 
 class MPDState:
@@ -100,7 +100,7 @@ class MPDState:
 		self.state_values = []
 
 	def update(self):
-		for q in range(self.mpd.quantity_decls)
+		for q in self.mpd.quantity_decls:
 			if isinstance(q, DerivedQuantityDecl):
 				q.update(self.state_values)
 
@@ -115,14 +115,21 @@ class MPDState:
 	def __getitem__(self, state_value_key):
 		return self.state_values[state_value_key]
 
+        def _interpolate01_field(f1, f2, lambda_):
+                for i in range(mpd.regions):
+                        f1[i] = f1[i]*(1.0-lambda_) + f2[i]*lambda_
+                        
+        
 	# interpolates values between this state and the other state by a factor of lambda [0, 1]  
 	def interpolate01(self, other_state, lambda_):
 		for sk in self.state_values:
-			if (
-			self.state_values[sk] = self.state_values[sk]*(1.0-lambda_) + other_state[sk]*(lambda_)
+                        if isinstance(mpd.quantity_decls[sk], FieldDecl):
+                                _interpolate01_field(self.state_values[sk], other_state[sk], lambda_)
+			else:
+                                self.state_values[sk] = self.state_values[sk]*(1.0-lambda_) + other_state[sk]*(lambda_)
 
 	def interpolate(self, other_state, lambda_beg, lambda_end, lambda_):
-		self.interpolate01(other_state, (lambda_-lambda_beg)/(lambda_end-lambda_beg)
+		self.interpolate01(other_state, (lambda_-lambda_beg)/(lambda_end-lambda_beg))
 
 	def copy_from(self, other_state):
 		self.interpolate01(other_state, 1.0)
