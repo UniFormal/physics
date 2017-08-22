@@ -1,3 +1,4 @@
+import numpy
 
 class MPDBase:
 	def __init__(self, name, parent, regions):
@@ -83,6 +84,7 @@ class Law(Declaration):
 	def __init__(self, **kwargs):
 		Declaration.__init__(self, kwargs.pop("name"), kwargs.pop("parent"))
 		self.variables = kwargs.pop("variables")
+                self.law_test = kwargs.pop("law_test")
 		self.rules = kwargs
 
 	def __getitem__(self, rule_subject):
@@ -94,10 +96,13 @@ class Law(Declaration):
 		s += "variables: " + self.variables.join(',') 
 		return s
 
+        def test_law(self, state):
+                return self.law_test(state)
+
 class MPDState:
 	def __init__(self, mpd):
 		self.mpd = mpd
-		self.state_values = []
+		self.state_values = {}
 
 	def update(self):
 		for q in self.mpd.quantity_decls:
@@ -112,9 +117,12 @@ class MPDState:
 		
 		return s
 
-	def __getitem__(self, state_value_key):
-		return self.state_values[state_value_key]
+	def __getitem__(self, quantity_name):
+		return self.state_values[quantity_name]
 
+        def checkLaw(self, law_name):
+                self.mpd.laws[law_name].test_law(self) < 0.001
+        
         def _interpolate01_field(f1, f2, lambda_):
                 for i in range(mpd.regions):
                         f1[i] = f1[i]*(1.0-lambda_) + f2[i]*lambda_

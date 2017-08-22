@@ -39,7 +39,7 @@ class PythonExporter extends Exporter {
   private class QuantityPyExpression(state: String, quantityValue: Term) {
     var parameters: List[String] = Nil
     
-    val expression = makeQuantityPyExpression(quantityValue)
+    val expression: String = makeQuantityPyExpression(quantityValue)
     
     private def makeQuantityPyExpression(q : Term): String = q match {
       case QEMul(d1, d2, v1, v2) => 
@@ -92,10 +92,14 @@ class PythonExporter extends Exporter {
   }
     
   private def lawsPyAttributes(mpd: MPD) = 
-    mpd.laws.map(l => {Map(
+    mpd.laws.map(l => {
+      val lawLhsExpr = new QuantityPyExpression("state", l.formula.lhs)
+      val lawRhsExpr = new QuantityPyExpression("state", l.formula.rhs)
+      Map(
         "name" -> s"'${l.name.toString}'",
         "parent" -> s"'${l.parent.toString}'",
-        "variables" -> s"${getStringListPy(l.usedQuantities.map(_.name.toString))}") ++ 
+        "variables" -> s"${getStringListPy(l.usedQuantities.map(_.name.toString))}",
+        "law_test" -> s"lambda state: ((${lawLhsExpr.expression}) - (${lawRhsExpr.expression}))") ++ 
         l.rules.map(r => (r.solved.name.toString, makeExpressionPyLambda("state", r.solution.value)))
     })
   

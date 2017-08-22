@@ -75,7 +75,8 @@ class MPD_Example(MPDBase):
 			variables = ['p' ,'i' ,'v'],
 			i = lambda state: (state['p'] / state['v']),
 			v = lambda state: (state['p'] / state['i']),
-			p = lambda state: (state['i'] * state['v']) 
+			p = lambda state: (state['i'] * state['v']),
+			law_test = lambda state: ((state['p']) - ((state['i'] * state['v']))) 
 		)
 
 		self.laws['law4'] = Law(
@@ -84,7 +85,8 @@ class MPD_Example(MPDBase):
 			u = lambda state: (state['p'] / state['i']),
 			variables = ['p' ,'i' ,'u'],
 			i = lambda state: (state['p'] / state['u']),
-			p = lambda state: (state['i'] * state['u']) 
+			p = lambda state: (state['i'] * state['u']),
+			law_test = lambda state: ((state['p']) - ((state['i'] * state['u']))) 
 		)
 
 		self.laws['law3'] = Law(
@@ -93,6 +95,7 @@ class MPD_Example(MPDBase):
 			u = lambda state: (state['q'] / state['c']),
 			variables = ['q' ,'u' ,'c'],
 			q = lambda state: (state['c'] * state['u']),
+			law_test = lambda state: ((state['q']) - ((state['c'] * state['u']))),
 			c = lambda state: (state['q'] / state['u']) 
 		)
 
@@ -102,7 +105,8 @@ class MPD_Example(MPDBase):
 			t = lambda state: (state['q'] / state['i']),
 			variables = ['q' ,'i' ,'t'],
 			i = lambda state: (state['q'] / state['t']),
-			q = lambda state: (state['i'] * state['t']) 
+			q = lambda state: (state['i'] * state['t']),
+			law_test = lambda state: ((state['q']) - ((state['i'] * state['t']))) 
 		)
 
 		self.laws['law1'] = Law(
@@ -111,8 +115,7 @@ class MPD_Example(MPDBase):
 			u = lambda state: (state['r'] * state['i']),
 			variables = ['u' ,'r' ,'i'],
 			i = lambda state: (state['u'] / state['r']),
+			law_test = lambda state: ((state['u']) - ((state['r'] * state['i']))),
 			r = lambda state: (state['u'] / state['i']) 
 		)
-
-
 

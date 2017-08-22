@@ -44,7 +44,7 @@ case class Quantity(value: Term, tp:Term) {
   
   def equal(q: Quantity): Formula = {
     (tp, q.tp) match {
-       case (QE(d), QE(e)) if d == e => Formula(Logic._eq(d, value, q.value))
+       case (QE(d), QE(e)) if d == e => Formula(d, value, q.value)
        case _ => throw new scala.MatchError("Error")
     }
   }
@@ -81,7 +81,7 @@ case class Quantity(value: Term, tp:Term) {
   
 }
 
-case class Formula(value: Term)
+case class Formula(tp: Term, lhs: Term, rhs: Term)
 
 
 abstract class MPDComponent
@@ -99,13 +99,6 @@ case class Rule(solved: GlobalName, solution: Quantity)
 // A law is a named container of all rules of an equation/formula
 case class Law(parent: MPath, name: LocalName, formula: Formula, rules: List[Rule]) extends MPDComponent with MPDNode{
   def path = parent ? name
-  
-  // this method doesn't seem to recurse, so it's useless for now
-  lazy val globalNames = {
-    formula.value.subobjects.collect {
-      case (_,OMS(p)) => p
-    }.distinct.toList
-  }
   
   def usedQuantities = rules.map(_.solved)
   

@@ -28,22 +28,28 @@ class MPDTool extends ShellExtension("mpd") {
      true
    }
    
-   def toFormula(t: Term): Formula = Formula(t)
-   
-   def toQuantity(value: Term, tp: Term): Quantity = Quantity(value, tp)
-   
-   def getRules(formula: Formula): List[Rule] = {
-     formula.value match {
-       case Logic.and(lhs, rhs) => (getRules(toFormula(lhs)) ++ getRules(toFormula(rhs))).distinct
+   def toFormula(t: Term): Formula = {
+     t match {
+//     case Logic.and(lhs, rhs) => (getRules(toFormula(lhs)) ++ getRules(toFormula(rhs))).distinct
        case Logic._eq(tp, lhs, rhs) => {
          val solvedPath = lhs match {
            case OMS(p) => p
            case _ => throw new GeneralError("LHS of rule should be a constant symbol")
          }
-         List(Rule(solvedPath, toQuantity(rhs, tp)))
+         Formula(tp, lhs, rhs)
        }
        case _ => throw new scala.MatchError("Error")
      }
+   }
+   
+   def toQuantity(value: Term, tp: Term): Quantity = Quantity(value, tp)
+   
+   def getRules(formula: Formula): List[Rule] = {
+         val solvedPath = formula.lhs match {
+           case OMS(p) => p
+           case _ => throw new GeneralError("LHS of rule should be a constant symbol")
+         }
+         List(Rule(solvedPath, toQuantity(formula.rhs, formula.tp))) 
    }
    
    def toMPDComponent(c: Constant): MPDComponent = {
