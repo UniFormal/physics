@@ -77,8 +77,10 @@ class MPDTool extends ShellExtension("mpd") {
      var comps: List[MPDComponent] = Nil
      thy.getDeclarations foreach {
        case c: Constant => comps ::= toMPDComponent(c)
-       case Include(_, from, _) => 
-         comps ++= getMPDComponentsFromTheory(controller.get(from).asInstanceOf[DeclaredTheory])
+       case Include(_, from, _) => {
+         if (from.parent.toString == "http://mathhub.info/MitM/Models")
+           comps ++= getMPDComponentsFromTheory(controller.get(from).asInstanceOf[DeclaredTheory])
+       }
        case _ => throw new GeneralError("Unsupported construct for mpd theory")
      }
      comps
@@ -86,6 +88,8 @@ class MPDTool extends ShellExtension("mpd") {
    
    def toMPD(p: MPath): Option[MPD] = {
      val thy = controller.get(p).asInstanceOf[DeclaredTheory]
+     println(thy.toString)
+     //None
      thy.meta match {
        case Some(x) if x.toString() == "http://mathhub.info/MitM/Models?MPD" => toMPD(thy)
        case _ => throw new GeneralError("Error: Theory must be a meta theory of http://mathhub.info/MitM/Models?MPD")
