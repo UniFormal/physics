@@ -1,0 +1,77 @@
+namespace http://mathhub.info/MitM/Models ❚
+
+import qe http://mathhub.info/MitM/Foundation/Units ❚
+import fnd http://mathhub.info/MitM/Foundation ❚
+
+theory MPD : ur:?LF =
+	include qe:?QEBase
+	include qe:?Field
+
+
+	
+theory Constants = 
+	include qe:?QEBase
+	
+
+
+
+theory Quantities =
+  include qe:?QEBase
+	include qe:?Field
+	include ur:?LF
+
+	
+	ε_0: QE ElectricalPermittivity role Constant 
+	q_e: QE ElectricCharge role Constant
+	k_b: QE (Energy /' Temperature) role Constant 
+  N_c: field VolumeDensity role Constant
+
+	
+	T: QE Time
+	
+	E_c: field Energy 
+
+	
+	ε_r: QE DimNone
+	ε_s: QE ElectricalPermittivity
+  j_n: QE ElectricCurrentDensity
+  
+  E: field ElectricField
+  Ψ: field Voltage
+  φ_n: field Voltage
+  D: field (ElectricCharge /' (Length *' Length))
+  ρ: field (ElectricCharge  /' (Length *' Length *' Length))
+  
+  n: field (DimNone /'(Length *' Length *' Length))
+  C: field (DimNone /'(Length *' Length *' Length))
+
+  
+  μ_n : QE (Area /' (ElectricPotential *' Time)) ❘ # mobility ❙
+  
+
+
+theory VanRoosbrockEg : ?MPD =
+	include ?Quantities
+	include qe:?Field
+	include qe:?QEBase
+                                         
+	
+	gauss_law: {x: space} ⊦ ρ ≐ (Δ_ D /Δ x) x
+	
+	charge_density_law: ⊦ ρ ≐ q_e  .* (C  .-  n)
+
+	displacement_law: ⊦ D ≐ ε_s .* E
+	
+	permitivity_law: ⊦ ε_s ≐ ε_r ⋅ ε_0
+	
+	electric_field: {x: space} ⊦ E ≐ (Δ_ Ψ /Δ x) x
+
+	electron_density: {e}⊦ n ≐ N_c .* (e .↑ (((q_e .* (Ψ .- φ_n)) .- E_c) ./ (k_b .* T)  ) )
+	
+	electron_current: {x: space} ⊦ j_n ≐ q_e .* μ_n .* n .* ((Δ_ φ_n /Δ x) x)
+	
+	electron_continuity_eqn: {x: space, zero} ⊦ (Δ_ j_n /Δ x) x ≐ zero
+	
+
+
+	

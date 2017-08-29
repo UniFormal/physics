@@ -9,39 +9,49 @@ import info.mathhub.lf.MitM.Foundation._
 import Units.Units._
 import Units.Dimensions._
 import Units.QEBase._
+import Units.Field._
 
-/*
- 
-case class
- 
- */
 
-case class Quantity(value: Term, tp:Term) {
+//case class 
+ 
+case class Quantity(value: Term, tp:Term, isField: Boolean = false, isConstant: Boolean = false) {
   def times(q: Quantity) = {
     (tp, q.tp) match {
-       case (QE(d), QE(e)) => Quantity(QEMul(d, e, value, q.value), QE(DimTimes(d,e)))
-       case _ => throw new scala.MatchError("Error times")
+       case (QE(d), QE(e)) => Quantity(QEMul(d, e, value, q.value), QE(DimTimes(d,e)), false)
+       case (field(d), QE(e)) => Quantity(FieldMul(d, e, value, q.value), field(DimTimes(d,e)), true) 
+       case (QE(d), field(e)) => Quantity(FieldMul(d, e, value, q.value), field(DimTimes(d,e)), true) 
+       case (field(d), field(e)) => Quantity(FieldMul(d, e, value, q.value), field(DimTimes(d,e)), true) 
+       case _ => throw new GeneralError("Multiplication doesn't make sense for : " + (tp, q.tp))
     }
   }
   def div(q: Quantity) = {
     (tp, q.tp) match {
-       case (QE(d), QE(e)) => Quantity(QEDiv(d, e, value, q.value), QE(DimDiv(d,e)))
-       case _ => throw new scala.MatchError("Error")
+       case (QE(d), QE(e)) => Quantity(QEDiv(d, e, value, q.value), QE(DimDiv(d,e)), false)
+       case (field(d), QE(e)) => Quantity(FieldDiv(d, e, value, q.value), field(DimDiv(d,e)), true) 
+       case (QE(d), field(e)) => Quantity(FieldDiv(d, e, value, q.value), field(DimDiv(d,e)), true) 
+       case (field(d), field(e)) => Quantity(FieldDiv(d, e, value, q.value), field(DimDiv(d,e)), true) 
+       case _ => throw new GeneralError("Division doesn't make sense for : " + (tp, q.tp))
     }
   }
   def add(q: Quantity) = {
     (tp, q.tp) match {
-       case (QE(d), QE(e)) if d == e => Quantity(QEAdd(d, value, q.value), QE(d))
-       case _ => throw new scala.MatchError("Error")
+       case (QE(d), QE(e)) if d == e => Quantity(QEAdd(d, value, q.value), QE(d), false)
+       case (field(d), field(e)) => Quantity(FieldAdd(d, value, q.value), field(d), true) 
+       case _ => throw new GeneralError("Addition doesn't make sense for : " + (tp, q.tp))
     }
   }
   def sub(q: Quantity) = {
     (tp, q.tp) match {
        case (QE(d), QE(e)) if d == e => Quantity(QESubtract(d, value, q.value), QE(d))
-       case _ => throw new scala.MatchError("Error")
+       case _ => throw new GeneralError("Subtraction doesn't make sense for : " + (tp, q.tp))
     }
   }
-  
+  def exp(q: Quantity) = {
+    (tp, q.tp) match {
+      case (QE(d), QE(e)) if e == DimNone && d == DimNone => Quantity(QEExp(value, q.value), QE(d))
+      case _ => throw new GeneralError("Exponentiation doesn't make sense for : " + (tp, q.tp))
+    }
+  }
   def equal(q: Quantity): Formula = {
     (tp, q.tp) match {
        case (QE(d), QE(e)) if d == e => Formula(d, value, q.value)
@@ -86,12 +96,17 @@ case class Formula(tp: Term, lhs: Term, rhs: Term)
 
 abstract class MPDComponent
 
+case class QuantitySpaceDecl(parent: MPath, name: LocalName) extends MPDComponent
+
+case class IntegrationSurfaceDecl(parent: MPath, name: LocalName) extends MPDComponent
+
 trait MPDNode
 
-case class QuantityDecl(parent: MPath, name: LocalName, arguments: List[Term], dim: Term, df: Option[Quantity]) extends MPDComponent with MPDNode {
+case class QuantityDecl(parent: MPath, name: LocalName, arguments: List[(Option[LocalName], Term)], dim: Term, df: Option[Quantity], isField: Boolean, isConstant: Boolean) extends MPDComponent with MPDNode {
   def path = parent ? name // '?' forms global name
-  def toQuantity = Quantity(OMS(path), QE(dim))
+  def toQuantity = Quantity(OMS(path), QE(dim), isField, isConstant)
 }
+
 
 // A rule is an equation solved for a variable
 case class Rule(solved: GlobalName, solution: Quantity)
@@ -212,7 +227,7 @@ case class Cycle(steps: List[Step]) {
 }
 
 // MPDs
-case class MPD(parent: DPath, name: LocalName, quantityDecls: List[QuantityDecl], laws: List[Law]) {
+case class MPD(parent: DPath, name: LocalName, quantityDecls: List[QuantityDecl], laws: List[Law], integrationSurfaces: List[IntegrationSurfaceDecl], spaces: List[QuantitySpaceDecl]) {
   def path = parent ? name
   
   def quantitiesInLaw(l: Law) = quantityDecls.map(_.path) intersect l.usedQuantities
@@ -387,15 +402,15 @@ class MPDSolver(val mpd: MPD, val initialState: MPDState) {
 object EvaluateQuantity {
   def apply(quantity: Quantity, vMap: Map[LocalName, Option[ImpreciseFloat]]): ImpreciseFloat = {
     quantity match {   
-      case Quantity(QEMul(d1, d2, v1, v2), ft) => 
+      case Quantity(QEMul(d1, d2, v1, v2), ft, _, _) => 
         EvaluateQuantity(Quantity(v1, ft), vMap) * EvaluateQuantity(Quantity(v2, ft), vMap) 
-      case Quantity(QEDiv(d1, d2, v1, v2), ft) => 
+      case Quantity(QEDiv(d1, d2, v1, v2), ft, _, _) => 
         EvaluateQuantity(Quantity(v1, ft), vMap) / EvaluateQuantity(Quantity(v2, ft), vMap) 
-      case Quantity(QEAdd(d, v1, v2), ft) => 
+      case Quantity(QEAdd(d, v1, v2), ft, _, _) => 
         EvaluateQuantity(Quantity(v1, ft), vMap) + EvaluateQuantity(Quantity(v2, ft), vMap)
-      case Quantity(QESubtract(d, v1, v2), ft) => 
+      case Quantity(QESubtract(d, v1, v2), ft, _, _) => 
         EvaluateQuantity(Quantity(v1, ft), vMap) - EvaluateQuantity(Quantity(v2, ft), vMap)
-      case Quantity(OMS(path), ft) if vMap(path.name).get != None => return vMap(path.name).get
+      case Quantity(OMS(path), ft, _, _) if vMap(path.name).get != None => return vMap(path.name).get
       case _ => throw new scala.MatchError("Math Error")
     }
   }

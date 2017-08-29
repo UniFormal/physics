@@ -8,10 +8,13 @@ import archives._
 import utils._
 import objects._
 
+import info.kwarc.mmt.lf._
+
 import info.mathhub.lf.MitM.Foundation._
 import Units.Units._
 import Units.Dimensions._
 import Units.QEBase._
+import Units.Field._
 
 /**
  * run via build mpd-python ARCHIVE
@@ -44,20 +47,46 @@ class PythonExporter extends Exporter {
     private def makeQuantityPyExpression(q : Term): String = q match {
       case QEMul(d1, d2, v1, v2) => 
         s"(${makeQuantityPyExpression(v1)} * ${makeQuantityPyExpression(v2)})" 
+      case FieldMul(d1, d2, v1, v2) => 
+        s"(${makeQuantityPyExpression(v1)} * ${makeQuantityPyExpression(v2)})" 
+        
       case QEDiv(d1, d2, v1, v2) => 
         s"(${makeQuantityPyExpression(v1)} / ${makeQuantityPyExpression(v2)})" 
+      case FieldDiv(d1, d2, v1, v2) => 
+        s"(${makeQuantityPyExpression(v1)} / ${makeQuantityPyExpression(v2)})" 
+        
       case QEAdd(d, v1, v2) => 
         s"(${makeQuantityPyExpression(v1)} + ${makeQuantityPyExpression(v2)})" 
+      case FieldAdd(d, v1, v2) => 
+        s"(${makeQuantityPyExpression(v1)} + ${makeQuantityPyExpression(v2)})" 
+        
       case QESubtract(d, v1, v2) => 
         s"(${makeQuantityPyExpression(v1)} - ${makeQuantityPyExpression(v2)})" 
+      case FieldSubtract(d, v1, v2) => 
+        s"(${makeQuantityPyExpression(v1)} - ${makeQuantityPyExpression(v2)})" 
+        
+      case QEExp(v1, v2) => 
+        s"(${makeQuantityPyExpression(v1)} ** ${makeQuantityPyExpression(v2)})" 
+      case FieldExp(v1, v2) => 
+        s"(${makeQuantityPyExpression(v1)} ** ${makeQuantityPyExpression(v2)})" 
+        
+     case FieldSpaceDeriv(a, v, c, d) => println(a, v, c, d) 
+        s"(derivative_on_space(${makeQuantityPyExpression(v)}, self.space)" 
+        
       case OMS(path) => {
           parameters ::= path.name.toString
           state + "['" + ensureIdentifierString(path.name.toString) + "']" 
       }
+      
+      case ApplyGeneral(f, x) => println(q)
+        val OMS(path) = f
+        parameters ::= path.name.toString
+        state + "['" + ensureIdentifierString(path.name.toString) + "']" 
+      
       case l: OMLITTrait => l.toString
       case OMV(n) => n.toPath
       case OMA(OMID(path), _) =>
-        throw LocalError("Undefined operation: " + path.toString())
+        throw LocalError("Undefined operation: " + q.toString())
       case t => throw LocalError("Match Error:" + t.toStr(true))
     }
     
@@ -82,7 +111,9 @@ class PythonExporter extends Exporter {
           "dimension" -> (q.dim match {
             case OMS(p) => s"'${p.name.toString}'"
             case _ => "''"
-          })
+          }),
+          "is_field" -> {if (q.isField) "True" else "False"} ,
+          "is_constant" -> {if (q.isConstant) "True" else "False"}
       )
       if (q.df != None)
         (parameters:+("compute" -> makeExpressionPyLambda("state", q.df.get.value))).toMap
@@ -98,7 +129,8 @@ class PythonExporter extends Exporter {
       Map(
         "name" -> s"'${l.name.toString}'",
         "parent" -> s"'${l.parent.toString}'",
-        "variables" -> s"${getStringListPy(l.usedQuantities.map(_.name.toString))}",
+        "solvables" -> s"${getStringListPy(l.usedQuantities.map(_.name.toString))}",
+        "used_quantities" -> s"${getStringListPy(lawRhsExpr.parameters ++ lawLhsExpr.parameters)}",
         "law_test" -> s"lambda state: ((${lawLhsExpr.expression}) - (${lawRhsExpr.expression}))") ++ 
         l.rules.map(r => (r.solved.name.toString, makeExpressionPyLambda("state", r.solution.value)))
     })
@@ -115,11 +147,12 @@ ${pyIndent(currentIndentLevel)})"""
 from mpdbase import *
 
 class MPD_${mpd.name.toString()}(MPDBase):
-${pyIndent(1)}def __init__(self, regions=1):
+${pyIndent(1)}def __init__(self, space, integration_surfaces=[]):
 ${pyIndent(2)}MPDBase.__init__(self, 
-${pyIndent(3)}regions,
 ${pyIndent(3)}'${mpd.name.toString}',
-${pyIndent(3)}'${mpd.parent.toString}')
+${pyIndent(3)}'${mpd.parent.toString}',
+${pyIndent(3)}space,
+${pyIndent(3)}integration_surfaces)
 
 ${pyIndent(1)}def init_quantity_decls(self):
 ${pyIndent(2)}${quantityDeclsPyAttributes(mpd).map{

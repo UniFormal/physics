@@ -1,24 +1,14 @@
 import numpy
 
 class MPDBase:
-	def __init__(self, name, parent, space, surface_integrators = []):
+	def __init__(self, name, parent, regions):
 		self.name = ""
 		self.parent = ""
-
-                self.space = space
-		self.surface_integrators = surface_intergrators
-
+                self.regions = regions
+        	self.laws = {}
 		self.quantity_decls = {}
-		self.variable_quantity_decls_keys = []
-		self.constant_quantity_decls_keys = []
-		self.field_quantity_decls_keys = []
-		self.uniform_quantity_decls_keys = []
-
-		self.laws = {}
 		self.init_quantity_decls()
 		self.init_laws()
-
-		self.graph = []
 
 	def init_laws(self):
 		pass
@@ -61,8 +51,6 @@ class QuantityDecl(Declaration):
 		Declaration.__init__(self, kwargs["name"], kwargs["parent"])
 		self.init_value = 0.0
 		self.dimension = kwargs["dimension"]
-		self.is_field = kwargs["is_field"]
-		self.is_constant = kwargs["is_constant"]
 
 	def __str__(self):
 		s = "---Quantity Decl---\n"
@@ -88,12 +76,14 @@ class DerivedQuantityDecl(QuantityDecl):
 		s += "dimension: " + self.dimension
 		return s
 
+class FieldDecl(Declaration):
+	def init(self, regions):
+		self.init_value = [0.0 for i in range(regions)]
 
 class Law(Declaration):
 	def __init__(self, **kwargs):
 		Declaration.__init__(self, kwargs.pop("name"), kwargs.pop("parent"))
-		self.solvables = kwargs.pop("solvables")
-		self.used_quantities = kwargs.pop("used_quantities")
+		self.variables = kwargs.pop("variables")
                 self.law_test = kwargs.pop("law_test")
 		self.rules = kwargs
 
@@ -130,14 +120,21 @@ class MPDState:
 	def __getitem__(self, quantity_name):
 		return self.state_values[quantity_name]
 
-        def test_law(self, law_name):
-                return self.mpd.laws[law_name].test_law(self)
+        def checkLaw(self, law_name):
+                self.mpd.laws[law_name].test_law(self) < 0.001
+        
+        def _interpolate01_field(f1, f2, lambda_):
+                for i in range(mpd.regions):
+                        f1[i] = f1[i]*(1.0-lambda_) + f2[i]*lambda_
                         
         
 	# interpolates values between this state and the other state by a factor of lambda [0, 1]  
 	def interpolate01(self, other_state, lambda_):
 		for sk in self.state_values:
-                        self.state_values[sk] = self.state_values[sk]*(1.0-lambda_) + other_state[sk]*(lambda_)
+                        if isinstance(mpd.quantity_decls[sk], FieldDecl):
+                                _interpolate01_field(self.state_values[sk], other_state[sk], lambda_)
+			else:
+                                self.state_values[sk] = self.state_values[sk]*(1.0-lambda_) + other_state[sk]*(lambda_)
 
 	def interpolate(self, other_state, lambda_beg, lambda_end, lambda_):
 		self.interpolate01(other_state, (lambda_-lambda_beg)/(lambda_end-lambda_beg))
@@ -148,8 +145,4 @@ class MPDState:
 	def copy_to(self, other_state):
 		other_state.copy_from(self)
 
-
-def derivative_on_space(image, dom):
-	deriv = numpy.diff(image)/numpy.diff(dom)
-	return numpy.append(deriv, deriv[-1])
-
+	

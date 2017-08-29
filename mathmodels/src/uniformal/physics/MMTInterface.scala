@@ -6,12 +6,14 @@ import modules._
 import objects._
 import symbols._
 
+
 import info.kwarc.mmt.lf._
 
 import info.mathhub.lf.MitM.Foundation._
 import Units.Units._
 import Units.Dimensions._
 import Units.QEBase._
+import Units.Field._
 
 
 class MPDTool extends ShellExtension("mpd") { 
@@ -34,7 +36,10 @@ class MPDTool extends ShellExtension("mpd") {
        case Logic._eq(tp, lhs, rhs) => {
          val solvedPath = lhs match {
            case OMS(p) => p
-           case _ => throw new GeneralError("LHS of rule should be a constant symbol")
+           case ApplyGeneral(f, x) =>
+             val OMS(p) = f
+             p
+           case _ => throw new GeneralError("LHS of rule should be a constant symbol, not " + lhs.toString)
          }
          Formula(tp, lhs, rhs)
        }
@@ -47,6 +52,9 @@ class MPDTool extends ShellExtension("mpd") {
    def getRules(formula: Formula): List[Rule] = {
          val solvedPath = formula.lhs match {
            case OMS(p) => p
+           case ApplyGeneral(f, x) =>
+             val OMS(p) = f
+             p
            case _ => throw new GeneralError("LHS of rule should be a constant symbol")
          }
          List(Rule(solvedPath, toQuantity(formula.rhs, formula.tp))) 
@@ -63,12 +71,24 @@ class MPDTool extends ShellExtension("mpd") {
                case Logic.ded(x) =>
                  val formula = toFormula(x)
                  Law(c.parent, c.name, formula, getRules(formula))
+               
                case QE(d) =>
+                 if (c.rl != None && c.rl.get != "Constant")
+                   throw new GeneralError("Unknown role given to MPD quantity")
                  val df = c.df.map{t => toQuantity(t, d)}
-                 QuantityDecl(c.parent, c.name, Nil, d, df)
+                 QuantityDecl(c.parent, c.name, args, d, df, false, c.rl == Some("Constant"))
+               case field(d) => {
+                 if (c.rl != None && c.rl.get != "Constant")
+                   throw new GeneralError("Unknown role given to MPD quantity: " + c.rl.get)
+                 val df = c.df.map{t => toQuantity(t, d)}
+                 QuantityDecl(c.parent, c.name, args, d, df, true, c.rl == Some("Constant"))
+               }
+               case surface(p) =>
+                 IntegrationSurfaceDecl(c.parent, c.name)
+               case space(p) => 
+                 QuantitySpaceDecl(c.parent, c.name)
                case _ =>
-                 println(c)
-                 throw new scala.MatchError("Error")
+                 throw new GeneralError("Unknown construction of MPD component")
              }
          }
    }
@@ -98,13 +118,16 @@ class MPDTool extends ShellExtension("mpd") {
    
    def toMPD(thy: DeclaredTheory): Option[MPD] = {
      val meta = thy.meta.getOrElse(return None)
+     println(meta)
      if (meta.toString() != "http://mathhub.info/MitM/Models?MPD")
        return None
-     
      val comps: List[MPDComponent] = getMPDComponentsFromTheory(thy).reverse
      
      var laws: List[Law] = Nil
      var quantityDecls: List[QuantityDecl] = Nil
+     var integrationSurfaces: List[IntegrationSurfaceDecl] = Nil
+     var spaces: List[QuantitySpaceDecl] = Nil
+
      comps foreach { 
        comp => comp match {
          case qd if qd.isInstanceOf[QuantityDecl]  => quantityDecls ::= qd.asInstanceOf[QuantityDecl]
@@ -120,9 +143,16 @@ class MPDTool extends ShellExtension("mpd") {
            }else
              laws ::= newLaw
          }
+         case surface if surface.isInstanceOf[IntegrationSurfaceDecl] =>
+           integrationSurfaces ::= surface.asInstanceOf[IntegrationSurfaceDecl]
+         
+         // should deal with once I manage how to make fields with different spaces work in MMT
+         case space if space.isInstanceOf[QuantitySpaceDecl] => 
+           spaces ::= space.asInstanceOf[QuantitySpaceDecl]
+           
          case _ => throw new scala.MatchError("Error")
        }
      }
-     Some(MPD(thy.parent, thy.name, quantityDecls, laws))
+     Some(MPD(thy.parent, thy.name, quantityDecls, laws, integrationSurfaces, spaces))
    }
 }

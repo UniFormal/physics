@@ -1,14 +1,17 @@
 namespace http://mathhub.info/MitM/Models ❚
 
+
 import qe http://mathhub.info/MitM/Foundation/Units ❚
 import fnd http://mathhub.info/MitM/Foundation ❚
 
+
 // MPDs should use this as a base
 theory MPD : ur:?LF =
-
+	include qe:?QEBase
+	include qe:?Field
 
-
-theory 1Cons : qe:?QEBase =
+	
+theory Quantities2 : qe:?QEBase =
   u: QE Voltage
   v: QE Voltage
   i: QE Current
@@ -17,28 +20,94 @@ theory 1Cons : qe:?QEBase =
   t: QE Time
   c: QE ElectricalCapacitance
   p: QE Power
+  derivedQuantityEx : QE Voltage  = r ⋅ i 
 
 
+  
 theory Example : ?MPD =
-	include ?1Cons
+	include ?Quantities2
+	include qe:?Field
+
 	
-  law1: ⊦ u ≐ r ⋅ i ∧ 
-          r ≐ u / i ∧
-          i ≐ u / r
+	U : field Voltage
+	I : field Current
+
+	D : field (Voltage /' Length)
+
+
+	R : field ElectricalResistance
+	// rr : QE DimNone
+	Ω: space
+	g: surface
+
+  // a: surface → QE Voltage =  ∑ i *Δ  r 
+
+	RR : field DimNone
+  law11: ⊦ (U Ω) ≐ (R Ω) ⋅ (I Ω)
+	law33: ⊦ RR ≐ RR .↑ RR
+  // law22: ⊦ U ≐ R .* I
+	
+  law1: ⊦ u ≐ r ⋅ i
+  law1_rule1: ⊦ r ≐ u / i
+  law1_rule2: ⊦ i ≐ u / r
+
+  // Δ x /Δ y
+  
+  s: surface
+  
+  b: QE (Voltage) = (∑ (i / u) *Δ u) s
+  
+  law_diff: {x: space} ⊦ D ≐ ((Δ_ U /Δ x) x)
+  
+  // aw2_rule2: {s: surface} ⊦ v ≐ a s
+  
+  // law23_rule1: ⊦ i ≐ ((Δ q /Δ t) t)
+  
+  law2: ⊦ q ≐ i ⋅ t
+  law2_rule1: ⊦ i ≐ q / t
+  law2_rule2: ⊦ t ≐ q / i
+  
+  law3: ⊦ q ≐ c ⋅ u
+  law3_rule1: ⊦ u ≐ q / c
+  law3_rule2: ⊦ c ≐ q / u
+  
+  law4: ⊦ p ≐ i ⋅ u
+  law4_rule1: ⊦ i ≐ p / u
+  law4_rule2: ⊦ u ≐ p / i
           
-  law2: ⊦ q ≐ i ⋅ t ∧ 
-          i ≐ q / t ∧
-          t ≐ q / i
-          
-  law3: ⊦ q ≐ c ⋅ u ∧ 
-          u ≐ q / c ∧
-          c ≐ q / u
-          
-  law4: ⊦ p ≐ i ⋅ u ∧ 
-          i ≐ p / u ∧
-          u ≐ p / i
-          
-  law5: ⊦ p ≐ i ⋅ v ∧ 
-          i ≐ p / v ∧
-          v ≐ p / i
+  law5: ⊦ p ≐ i ⋅ v
+  law5_rule1: ⊦ i ≐ p / v
+  law5_rule2: ⊦ v ≐ p / i
+
+
+theory examplehodge  =
+	include qe:?QEBase
+	include qe:?Field
+
+
+    rr : QE DimNone
+	// derivedQuantityEx : QE Voltage  = r ⋅ i 
+	i: QE Current
+	U : field Voltage
+	I : field Current
+	R : field ElectricalResistance
+RR : field DimNone
+r: QE ElectricalResistance 
+
+	derivedField : field Voltage  = (i .* r) 
+	  r: QE ElectricalResistance
+
+	// law3: ⊦ i ≐ i .↑ rr
+  law1: {x : space} ⊦ (derivedField x) ≐ (R x) ⋅ (I x)
+  s:surface
+ 
+  law44: ⊦ derivedField ≐ (∑. R *Δ I) s
+  lll: field (ElectricalResistance *' Length) = {x:space} (∑_ R *Δ x) s
+
+  ff: field (ElectricalResistance *' Length)
+
+  law45: {x : space}  ⊦ ff  ≐  (∑_ R *Δ x) s
+ //   law2: {x : space} ⊦ (R x) ≐ ((R x) ↑ rr)
+
+  
 
