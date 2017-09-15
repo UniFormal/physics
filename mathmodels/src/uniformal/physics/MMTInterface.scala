@@ -32,7 +32,7 @@ class MPDTool extends ShellExtension("mpd") {
    
    def toFormula(t: Term): Formula = {
      t match {
-//     case Logic.and(lhs, rhs) => (getRules(toFormula(lhs)) ++ getRules(toFormula(rhs))).distinct
+       // TODO: let Formula take dimension instead of type
        case Logic._eq(tp, lhs, rhs) => {
          val solvedPath = lhs match {
            case OMS(p) => p
@@ -42,6 +42,16 @@ class MPDTool extends ShellExtension("mpd") {
            case _ => throw new GeneralError("LHS of rule should be a constant symbol, not " + lhs.toString)
          }
          Formula(tp, lhs, rhs)
+       }
+       case FieldEq(dim, lhs, rhs) =>{
+       val solvedPath = lhs match {
+           case OMS(p) => p
+           case ApplyGeneral(f, x) =>
+             val OMS(p) = f
+             p
+           case _ => throw new GeneralError("LHS of rule should be a constant symbol, not " + lhs.toString)
+         }
+         Formula(dim, lhs, rhs)
        }
        case _ => throw new scala.MatchError("Error")
      }
@@ -70,25 +80,25 @@ class MPDTool extends ShellExtension("mpd") {
              ret match {
                case Logic.ded(x) =>
                  val formula = toFormula(x)
-                 Law(c.parent, c.name, formula, getRules(formula))
+                 Law(c.parent, c.name, formula, getRules(formula), c.rl != Some("Condition"))
                
                case QE(d) =>
                  if (c.rl != None && c.rl.get != "Constant")
                    throw new GeneralError("Unknown role given to MPD quantity")
                  val df = c.df.map{t => toQuantity(t, d)}
-                 QuantityDecl(c.parent, c.name, args, d, df, false, c.rl == Some("Constant"))
+                 QuantityDecl(c.parent, c.name, d, df, false, c.rl == Some("Constant"))
                case field(d) => {
                  if (c.rl != None && c.rl.get != "Constant")
                    throw new GeneralError("Unknown role given to MPD quantity: " + c.rl.get)
                  val df = c.df.map{t => toQuantity(t, d)}
-                 QuantityDecl(c.parent, c.name, args, d, df, true, c.rl == Some("Constant"))
+                 QuantityDecl(c.parent, c.name, d, df, true, c.rl == Some("Constant"))
                }
-               case surface(p) =>
-                 IntegrationSurfaceDecl(c.parent, c.name)
+               //case surface(p) =>
+               //  IntegrationSurfaceDecl(c.parent, c.name)
                case space(p) => 
                  QuantitySpaceDecl(c.parent, c.name)
-               case _ =>
-                 throw new GeneralError("Unknown construction of MPD component")
+               case c =>
+                 throw new GeneralError("Unknown construction of MPD component: " +  c.toString())
              }
          }
    }
@@ -96,7 +106,8 @@ class MPDTool extends ShellExtension("mpd") {
    def getMPDComponentsFromTheory(thy: DeclaredTheory) : List[MPDComponent] = {
      var comps: List[MPDComponent] = Nil
      thy.getDeclarations foreach {
-       case c: Constant => comps ::= toMPDComponent(c)
+       case c: Constant => {println(c)
+         comps ::= toMPDComponent(c)}
        case Include(_, from, _) => {
          if (from.parent.toString == "http://mathhub.info/MitM/Models")
            comps ++= getMPDComponentsFromTheory(controller.get(from).asInstanceOf[DeclaredTheory])

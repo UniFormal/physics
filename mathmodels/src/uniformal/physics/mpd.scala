@@ -102,7 +102,7 @@ case class IntegrationSurfaceDecl(parent: MPath, name: LocalName) extends MPDCom
 
 trait MPDNode
 
-case class QuantityDecl(parent: MPath, name: LocalName, arguments: List[(Option[LocalName], Term)], dim: Term, df: Option[Quantity], isField: Boolean, isConstant: Boolean) extends MPDComponent with MPDNode {
+case class QuantityDecl(parent: MPath, name: LocalName, dim: Term, df: Option[Quantity], isField: Boolean, isConstant: Boolean) extends MPDComponent with MPDNode {
   def path = parent ? name // '?' forms global name
   def toQuantity = Quantity(OMS(path), QE(dim), isField, isConstant)
 }
@@ -112,7 +112,7 @@ case class QuantityDecl(parent: MPath, name: LocalName, arguments: List[(Option[
 case class Rule(solved: GlobalName, solution: Quantity)
 
 // A law is a named container of all rules of an equation/formula
-case class Law(parent: MPath, name: LocalName, formula: Formula, rules: List[Rule]) extends MPDComponent with MPDNode{
+case class Law(parent: MPath, name: LocalName, formula: Formula, rules: List[Rule], isComputational: Boolean = true) extends MPDComponent with MPDNode{
   def path = parent ? name
   
   def usedQuantities = rules.map(_.solved)

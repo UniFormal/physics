@@ -8,45 +8,35 @@ theory MPD : ur:?LF =
 	include qe:?Field
 
 
-	
-theory Constants = 
-	include qe:?QEBase
-	
-
-
-
 theory Quantities =
   include qe:?QEBase
 	include qe:?Field
 	include ur:?LF
 
+	electric_constant: QE ElectricalPermittivity # ε_0 role Constant
+	elementary_charge: QE ElectricCharge # q_e role Constant
 	
-	ε_0: QE ElectricalPermittivity role Constant 
-	q_e: QE ElectricCharge role Constant
-	k_b: QE (Energy /' Temperature) role Constant 
-  N_c: field VolumeDensity role Constant
+	boltzmann_constant: QE (Energy /' Temperature) # k_b role Constant 
+  temperature: QE Temperature # T role Constant
 
-	
-	T: QE Time
-	
-	E_c: field Energy 
-
-	
-	ε_r: QE DimNone
-	ε_s: QE ElectricalPermittivity
-  j_n: QE ElectricCurrentDensity
+	band_density: field VolumeDensity # N_c role Constant
+	band_energy: field Energy # E_c role Constant 	
   
-  E: field ElectricField
-  Ψ: field Voltage
-  φ_n: field Voltage
-  D: field (ElectricCharge /' (Length *' Length))
-  ρ: field (ElectricCharge  /' (Length *' Length *' Length))
+  relative_permittivity: QE DimNone # ε_r
+	absolute_permittivity: QE ElectricalPermittivity # ε_s
   
-  n: field (DimNone /'(Length *' Length *' Length))
-  C: field (DimNone /'(Length *' Length *' Length))
-
+  current_density: field ElectricCurrentDensity # j_n
   
-  μ_n : QE (Area /' (ElectricPotential *' Time)) ❘ # mobility ❙
+  electric_field: field ElectricField # E
+  electrostatic_potential: field Voltage # Ψ
+  quasifermi_potential: field Voltage # φ_n
+  displacement: field (ElectricCharge /' (Length *' Length)) # D
+  charge_density: field (ElectricCharge  /' (Length *' Length *' Length)) # ρ
+  
+  electron_density: field VolumeDensity # n
+  doping_profile: field VolumeDensity # C
+  
+  electron_mobility : QE (Area /' (ElectricPotential *' Time)) ❘ # μ_n ❙
   
 
 
@@ -54,23 +44,31 @@ theory VanRoosbrockEg : ?MPD =
 	include ?Quantities
 	include qe:?Field
 	include qe:?QEBase
-                                         
+	include fnd:?RealLiterals
+
+  
+	permitivity_law: ⊦ ε_s ≐ ε_0 ⋅ ε_r
+	permitivity_law_rule1:  ⊦ ε_r ≐ ε_s /  ε_0
 	
-	gauss_law: {x: space} ⊦ ρ ≐ (Δ_ D /Δ x) x
+	gauss_law: {x: space} ⊦ ρ ≐ Δ. D
 	
 	charge_density_law: ⊦ ρ ≐ q_e  .* (C  .-  n)
+	charge_density_law_rule1: ⊦ C ≐ ρ ./ q_e .+ n
+	charge_density_law_rule2: ⊦ n ≐ C .- (ρ ./ q_e)
 
 	displacement_law: ⊦ D ≐ ε_s .* E
+	displacement_law_rule1: ⊦ E ≐ D ./ ε_s
+	displacement_law_rule2: ⊦ ε_s .≐ D ./ E
 	
-	permitivity_law: ⊦ ε_s ≐ ε_r ⋅ ε_0
-	
-	electric_field: {x: space} ⊦ E ≐ (Δ_ Ψ /Δ x) x
+	electric_field_law: ⊦ E ≐ .~ (Δ. Ψ)
 
-	electron_density: {e}⊦ n ≐ N_c .* (e .↑ (((q_e .* (Ψ .- φ_n)) .- E_c) ./ (k_b .* T)  ) )
+	electron_density: ⊦ n ≐ N_c .* (exp. ((q_e .* (Ψ .- φ_n) .- E_c) ./ (k_b .* T)))
+	electron_density_rule1: ⊦ Ψ ≐ (ln. (n ./ N_c) .* (k_b .* T) .+ E_c) ./ q_e .+ φ_n
+	electron_density_rule2: ⊦ φ_n ≐ Ψ .- ((ln. (n ./ N_c) .* (k_b .* T) .+ E_c) ./ q_e)
 	
-	electron_current: {x: space} ⊦ j_n ≐ q_e .* μ_n .* n .* ((Δ_ φ_n /Δ x) x)
+	electron_current: ⊦ j_n ≐ .~ (q_e .* μ_n .* n .* (Δ. φ_n))
 	
-	electron_continuity_eqn: {x: space, zero} ⊦ (Δ_ j_n /Δ x) x ≐ zero
+	electron_continuity_eqn: {zero} ⊦ (Δ. j_n) ≐ zero role Condition
 	
 
 

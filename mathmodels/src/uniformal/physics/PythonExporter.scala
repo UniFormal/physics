@@ -23,6 +23,8 @@ class PythonExporter extends Exporter {
   
   override val outExt = "py"
   
+  val constants = Map("zero" -> "0", "one" -> "1", "pi" -> "numpy.pi")
+  
   val key = "mpd-python"
   private lazy val mpdtool = {
     val m = new MPDTool
@@ -45,6 +47,11 @@ class PythonExporter extends Exporter {
     val expression: String = makeQuantityPyExpression(quantityValue)
     
     private def makeQuantityPyExpression(q : Term): String = q match {
+      case QEMinus(d, v) => 
+        s"(- ${makeQuantityPyExpression(v)})" 
+      case FieldMinus(d, v) => 
+        s"(- ${makeQuantityPyExpression(v)})" 
+        
       case QEMul(d1, d2, v1, v2) => 
         s"(${makeQuantityPyExpression(v1)} * ${makeQuantityPyExpression(v2)})" 
       case FieldMul(d1, d2, v1, v2) => 
@@ -68,23 +75,50 @@ class PythonExporter extends Exporter {
       case QEExp(v1, v2) => 
         s"(${makeQuantityPyExpression(v1)} ** ${makeQuantityPyExpression(v2)})" 
       case FieldExp(v1, v2) => 
-        s"(${makeQuantityPyExpression(v1)} ** ${makeQuantityPyExpression(v2)})" 
+        s"(${makeQuantityPyExpression(v1)} ** ${makeQuantityPyExpression(v2)})"
         
-     case FieldSpaceDeriv(a, v, c, d) => println(a, v, c, d) 
-        s"(derivative_on_space(${makeQuantityPyExpression(v)}, self.space)" 
+      case QEEExp(v1) =>
+        s"numpy.exp(${makeQuantityPyExpression(v1)})"
+      case FieldEExp(v1) =>
+        s"numpy.exp(${makeQuantityPyExpression(v1)})"
+        
+      case QELog(v1, v2) =>
+        s"(numpy.log(${makeQuantityPyExpression(v1)})/numpy.log(${makeQuantityPyExpression(v2)}))"
+      case QEELog(v1) =>
+        s"numpy.log(${makeQuantityPyExpression(v1)})"
+        
+      case FieldEExp(v1) =>
+        s"numpy.exp(${makeQuantityPyExpression(v1)})"
+
+      case FieldLog(v1, v2) =>
+        s"(numpy.log(${makeQuantityPyExpression(v1)})/numpy.log(${makeQuantityPyExpression(v2)}))"
+      case FieldELog(v1) =>
+        s"numpy.log(${makeQuantityPyExpression(v1)})"
+        
+      case FieldDeriv(d, v) => 
+        s"(derivative_on_space(${makeQuantityPyExpression(v)}, self.space))" 
         
       case OMS(path) => {
+        val name = path.name.toString
+        if (constants contains name)
+          constants(name)
+        else{
           parameters ::= path.name.toString
-          state + "['" + ensureIdentifierString(path.name.toString) + "']" 
+          state + "['" + ensureIdentifierString(path.name.toString) + "']"
+        }
       }
+      
+      case OMV(n) => println(n.toPath)
+        if (constants contains n.toPath)
+          constants(n.toPath)
+        else 
+          n.toPath
       
       case ApplyGeneral(f, x) => println(q)
         val OMS(path) = f
         parameters ::= path.name.toString
         state + "['" + ensureIdentifierString(path.name.toString) + "']" 
       
-      case l: OMLITTrait => l.toString
-      case OMV(n) => n.toPath
       case OMA(OMID(path), _) =>
         throw LocalError("Undefined operation: " + q.toString())
       case t => throw LocalError("Match Error:" + t.toStr(true))
@@ -98,6 +132,12 @@ class PythonExporter extends Exporter {
   private def makeExpressionPyLambda(state: String, value: Term): String = {
     val expr = new QuantityPyExpression(state, value)
     makeExpressionPyLambda(state, expr)
+  }
+  
+  private def makeGraphPy(mpd: MPD): String = {
+    mpd.graph.map(x => {
+      (s"('${x.quantityDecl.name.toString}', '${x.law.name.toString}')")
+    }).mkString("[", ", ", "]")
   }
   
   private def getStringListPy(list :List[String]): String =
@@ -126,13 +166,17 @@ class PythonExporter extends Exporter {
     mpd.laws.map(l => {
       val lawLhsExpr = new QuantityPyExpression("state", l.formula.lhs)
       val lawRhsExpr = new QuantityPyExpression("state", l.formula.rhs)
-      Map(
-        "name" -> s"'${l.name.toString}'",
-        "parent" -> s"'${l.parent.toString}'",
-        "solvables" -> s"${getStringListPy(l.usedQuantities.map(_.name.toString))}",
-        "used_quantities" -> s"${getStringListPy(lawRhsExpr.parameters ++ lawLhsExpr.parameters)}",
-        "law_test" -> s"lambda state: ((${lawLhsExpr.expression}) - (${lawRhsExpr.expression}))") ++ 
-        l.rules.map(r => (r.solved.name.toString, makeExpressionPyLambda("state", r.solution.value)))
+      val out = Map(
+          "name" -> s"'${l.name.toString}'",
+          "parent" -> s"'${l.parent.toString}'",
+          "used_quantities" -> s"${getStringListPy(lawRhsExpr.parameters ++ lawLhsExpr.parameters)}",
+          "law_test" -> s"lambda state: ((${lawLhsExpr.expression}) - (${lawRhsExpr.expression}))")
+          
+      if (l.isComputational)
+        out ++ Map("solvables" -> s"${getStringListPy(l.usedQuantities.map(_.name.toString))}") ++
+          l.rules.map(r => (r.solved.name.toString, makeExpressionPyLambda("state", r.solution.value)))
+      else
+        out ++ Map("solvables" -> "[]")
     })
   
   def pyObjectAssignment(lhs: String, objname: String, attrs: Map[String, String], currentIndentLevel: Int): String = {
@@ -153,6 +197,7 @@ ${pyIndent(3)}'${mpd.name.toString}',
 ${pyIndent(3)}'${mpd.parent.toString}',
 ${pyIndent(3)}space,
 ${pyIndent(3)}integration_surfaces)
+${pyIndent(2)}self.graph = ${makeGraphPy(mpd)}
 
 ${pyIndent(1)}def init_quantity_decls(self):
 ${pyIndent(2)}${quantityDeclsPyAttributes(mpd).map{
@@ -166,6 +211,7 @@ ${pyIndent(2)}${lawsPyAttributes(mpd).map{
 
 
 """
+
     Some(py)
   }
   

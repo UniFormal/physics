@@ -9,13 +9,22 @@ class MPDBase:
 		self.surface_integrators = surface_intergrators
 
 		self.quantity_decls = {}
-		self.variable_quantity_decls_keys = []
-		self.constant_quantity_decls_keys = []
-		self.field_quantity_decls_keys = []
-		self.uniform_quantity_decls_keys = []
+                self.init_quantity_decls()
+                
+                self.variable_quantity_decls_keys = filter(
+                        lambda x: not self.quantity_decls[x].is_constant,
+                        self.quantity_decls.keys())
+		self.constant_quantity_decls_keys = filter(
+                        lambda x: self.quantity_decls[x].is_constant,
+                        self.quantity_decls.keys())
+		self.field_quantity_decls_keys = filter(
+                        lambda x: self.quantity_decls[x].is_field,
+                        self.quantity_decls.keys())
+		self.uniform_quantity_decls_keys = filter(
+                        lambda x: not self.quantity_decls[x].is_field,
+                        self.quantity_decls.keys())
 
 		self.laws = {}
-		self.init_quantity_decls()
 		self.init_laws()
 
 		self.graph = []
