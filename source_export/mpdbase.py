@@ -158,6 +158,8 @@ class MPDState:
 	# interpolates values between this state and the other state by a factor of lambda [0, 1]  
 	def interpolate01(self, other_state, lambda_):
 		for sk in self.state_values:
+                        if self.state_values[sk] is None or other_state.state_values[sk] is None:
+                                continue
                         self.state_values[sk] = self.state_values[sk]*(1.0-lambda_) + other_state[sk]*(lambda_)
 
 	def interpolate(self, other_state, lambda_beg, lambda_end, lambda_):
