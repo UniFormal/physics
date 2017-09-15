@@ -7,8 +7,7 @@ from mpdbase import *
 
 class MPD_VanRoosbrockEg(MPDBase):
 	def __init__(self, space, integration_surfaces=[]):
-		MPDBase.__init__(self, 
-			'VanRoosbrockEg',
+		MPDBase.__init__(self, 'VanRoosbrockEg',
 			'http://mathhub.info/MitM/Models',
 			space,
 			integration_surfaces)

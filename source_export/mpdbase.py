@@ -1,12 +1,12 @@
 import numpy
 
-class MPDBase:
+class MPDBase(object):
 	def __init__(self, name, parent, space, surface_integrators = []):
 		self.name = ""
 		self.parent = ""
 
                 self.space = space
-		self.surface_integrators = surface_intergrators
+		self.surface_integrators = surface_integrators
 
 		self.quantity_decls = {}
                 self.init_quantity_decls()
@@ -45,7 +45,6 @@ class MPDBase:
 		s = "----MPD----\n"
 		s += "--name: " + self.name + '\n'
 		s += "--parent: " + self.parent + '\n'
-		s += "--regions: " + str(self.regions) + '\n'
 		
 		for qk in self.quantity_decls:
 			s += str(self.quantity_decls[qk]) + '\n'
@@ -90,14 +89,13 @@ class DerivedQuantityDecl(QuantityDecl):
 
 	def update(self, state): # side effect: modifies state
 		state[self.name] = self.compute(state)
-
+        
 	def __str__(self):
 		s = "---Derived Quantity Decl---\n"
 		s += Declaration.__str__(self) + '\n'
 		s += "dimension: " + self.dimension
 		return s
-
-
+        
 class Law(Declaration):
 	def __init__(self, **kwargs):
 		Declaration.__init__(self, kwargs.pop("name"), kwargs.pop("parent"))
@@ -107,12 +105,15 @@ class Law(Declaration):
 		self.rules = kwargs
 
 	def __getitem__(self, rule_subject):
-		self.rules[rule_subject]
+		return self.rules[rule_subject]
 
+        def __getattr__(self, rule_subject):
+                return self.rules[rule_subject]
+                
 	def __str__(self):
 		s = "---Law---\n"
 		s += Declaration.__str__(self) + '\n'
-		s += "variables: " + self.variables.join(',') 
+		s += "used quantities: " + ','.join(self.used_quantities)
 		return s
 
         def test_law(self, state):
@@ -120,9 +121,11 @@ class Law(Declaration):
 
 class MPDState:
 	def __init__(self, mpd):
-		self.mpd = mpd
-		self.state_values = {}
-
+		self.__dict__['mpd'] = mpd
+                self.__dict__['state_values'] = {}
+                for n in mpd.quantity_decls:
+                        self.state_values[n] = None
+                
 	def update(self):
 		for q in self.mpd.quantity_decls:
 			if isinstance(q, DerivedQuantityDecl):
@@ -139,6 +142,15 @@ class MPDState:
 	def __getitem__(self, quantity_name):
 		return self.state_values[quantity_name]
 
+        def __setitem__(self, quantity_name, val):
+                self.state_values[quantity_name] = val
+
+        def __getattr__(self, quantity_name):
+                return self.state_values[quantity_name]
+
+        def __setattr__(self, quantity_name, val):
+                self.state_values[quantity_name] = val
+        
         def test_law(self, law_name):
                 return self.mpd.laws[law_name].test_law(self)
                         
