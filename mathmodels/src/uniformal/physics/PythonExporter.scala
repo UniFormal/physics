@@ -16,6 +16,8 @@ import Units.LawBase._
 import Units.GeometryBase._
 import Units.TacticBase._
 import Units.BoundaryConditionBase._
+import info.mathhub.lf.MitM.Foundation.Tensors._
+
 
 /**
  * run via build ARCHIVE mpd-python
@@ -84,6 +86,12 @@ class PythonExporter extends Exporter {
       case QuantityDivergence(d, g, n, v) =>
         s"(divergence(${makeQuantityPyExpression(v)}, self.space))" 
         
+      case MakeQuantity(l, g, d, t, lr) =>
+        s"(${makePyTensor(l, lr)})"
+      case MakeQuantityOnGeometry(l, g, d, t, lr) =>
+        //throw new GeneralError(makePyTensor(l, lr))
+        s"(${makePyTensor(l, lr)})"
+        
       case OMS(path) => {
         val name = path.name.toString
         if (constants contains name)
@@ -112,6 +120,29 @@ class PythonExporter extends Exporter {
     
   }
   
+  private def makePyTensor(tensorRankList: Term, tensorElementsList: Term): String = {
+    // val tensorRankDims = makeListFromListTerm(tensorRankList).map(s => s.asInstanceOf[Integer])
+    val tensorElements = makeListFromListTerm(tensorElementsList)
+    // val numberOfElementsRequired = tensorRankDims.foldRight(1){(acc, i)=>(acc *(i+1)) }
+    // if (numberOfElementsRequired != tensorElements.size)
+    //   throw new GeneralError("Tensor rank incompatable with number of elements")
+    getNumericalListPy(tensorElements)
+  }
+  
+  private def makeListFromListTerm(l: Term): List[String] = {
+    def get_list_recursive(t: Term, tail: List[String]) : List[String] = {
+      t match {
+        case tcons(a, x, b) => {
+          get_list_recursive(b, (x.toString)::tail)
+        }
+        case rnil(p) => return tail
+        case nnil(p) => return tail
+      }
+    }
+    get_list_recursive(l, Nil)
+  }
+  
+  
   private def makeExpressionPyLambda(state: String , qexpr: QuantityPyExpression): String = 
     s"lambda $state: ${qexpr.expression}"
   
@@ -129,6 +160,9 @@ class PythonExporter extends Exporter {
   private def getStringListPy(list :List[String]): String =
     list.mkString("['", "' ,'", "']")
   
+  private def getNumericalListPy(list: List[String]): String = 
+    list.mkString("numpy.array([", " ,", "])")
+    
   private def quantityDeclsPyAttributes(mpd: MPD) = {
     mpd.quantityDecls.map(q => {
       val parameters = List(

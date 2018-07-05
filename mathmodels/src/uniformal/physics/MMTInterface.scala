@@ -92,6 +92,7 @@ class MPDTool extends ShellExtension("mpd") {
              
            case Some(t) =>
              val FunType(args, ret) = t
+             
              ret match {
                
                case Quantity(l, geom, dim, tens) =>
@@ -113,14 +114,10 @@ class MPDTool extends ShellExtension("mpd") {
                  println(g)
                  None
                  
-               case ChainAggregate(a, b) =>
-                 println("CHAIN AGGREAGET")
-                 println(a)
+               case GetStepType(a) =>
+                 println("Step: ", a)
                  None
                  
-               case GetStepType(a) =>
-                 println(a)
-                 None
                /*
                case Logic.ded(x) =>
                  val formula = toFormula(x)
@@ -160,7 +157,7 @@ class MPDTool extends ShellExtension("mpd") {
          val comp = toMPDComponent(c)
          if (comp != None) comps ::= comp.get}
        case Include(_, from, _) => {
-         if (from.parent.toString == "http://mathhub.info/MitM/Models")
+         if (from.parent.toString == "http://mathhub.info/MitM/Modelss")
            comps ++= getMPDComponentsFromTheory(controller.get(from).asInstanceOf[DeclaredTheory])
        }
        case _ => throw new GeneralError("Unsupported construct for mpd theory")
