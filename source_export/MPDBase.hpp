@@ -3,6 +3,8 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
+#include <utility>
 
 namespace MPD
 {
@@ -30,6 +32,8 @@ namespace MPD
     unsigned _regions;
     std::unordered_map<std::string, QuantityDecl> _quantityDecls;
     std::unordered_map<std::string, Law> _laws;
+
+    std::vector<std::pair<std::string, std::string>> _graph;
   };
 }
 

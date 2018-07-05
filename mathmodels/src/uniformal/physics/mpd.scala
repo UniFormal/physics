@@ -8,57 +8,59 @@ import info.mathhub.lf.MitM.Foundation._
 
 import Units.Units._
 import Units.Dimensions._
-import Units.QEBase._
 import Units.Field._
-
+import Units.QuantityBase._
+import Units.GeometryBase._
+import Units.BoundaryConditionBase._
+import Units.TacticBase._
 
 //case class 
  
-case class Quantity(value: Term, tp:Term, isField: Boolean = false, isConstant: Boolean = false) {
-  def times(q: Quantity) = {
+case class MQuantity(value: Term, tp:Term, isField: Boolean = false, isConstant: Boolean = false) {
+  def times(q: MQuantity) = {
     (tp, q.tp) match {
-       case (QE(d), QE(e)) => Quantity(QEMul(d, e, value, q.value), QE(DimTimes(d,e)), false)
-       case (field(d), QE(e)) => Quantity(FieldMul(d, e, value, q.value), field(DimTimes(d,e)), true) 
-       case (QE(d), field(e)) => Quantity(FieldMul(d, e, value, q.value), field(DimTimes(d,e)), true) 
-       case (field(d), field(e)) => Quantity(FieldMul(d, e, value, q.value), field(DimTimes(d,e)), true) 
+       case (Quantity(l1, g1, d1, t1), Quantity(l2, g2, d2, t2)) if l1 == l2 && t1 == t2 => 
+         MQuantity(QuantityMul(d1, d2, g1, g2, l1, t1, value, q.value), 
+             Quantity(l1, GeometryIntersection(g1, g2), DimTimes(d1,d2), t1), false)
        case _ => throw new GeneralError("Multiplication doesn't make sense for : " + (tp, q.tp))
     }
   }
-  def div(q: Quantity) = {
+/*  
+  def div(q: MQuantity) = {
     (tp, q.tp) match {
-       case (QE(d), QE(e)) => Quantity(QEDiv(d, e, value, q.value), QE(DimDiv(d,e)), false)
-       case (field(d), QE(e)) => Quantity(FieldDiv(d, e, value, q.value), field(DimDiv(d,e)), true) 
-       case (QE(d), field(e)) => Quantity(FieldDiv(d, e, value, q.value), field(DimDiv(d,e)), true) 
-       case (field(d), field(e)) => Quantity(FieldDiv(d, e, value, q.value), field(DimDiv(d,e)), true) 
+       case (QE(d), QE(e)) => MQuantity(QEDiv(d, e, value, q.value), QE(DimDiv(d,e)), false)
+       case (field(d), QE(e)) => MQuantity(FieldDiv(d, e, value, q.value), field(DimDiv(d,e)), true) 
+       case (QE(d), field(e)) => MQuantity(FieldDiv(d, e, value, q.value), field(DimDiv(d,e)), true) 
+       case (field(d), field(e)) => MQuantity(FieldDiv(d, e, value, q.value), field(DimDiv(d,e)), true) 
        case _ => throw new GeneralError("Division doesn't make sense for : " + (tp, q.tp))
     }
   }
-  def add(q: Quantity) = {
+  def add(q: MQuantity) = {
     (tp, q.tp) match {
-       case (QE(d), QE(e)) if d == e => Quantity(QEAdd(d, value, q.value), QE(d), false)
-       case (field(d), field(e)) => Quantity(FieldAdd(d, value, q.value), field(d), true) 
+       case (QE(d), QE(e)) if d == e => MQuantity(QEAdd(d, value, q.value), QE(d), false)
+       case (field(d), field(e)) => MQuantity(FieldAdd(d, value, q.value), field(d), true) 
        case _ => throw new GeneralError("Addition doesn't make sense for : " + (tp, q.tp))
     }
   }
-  def sub(q: Quantity) = {
+  def sub(q: MQuantity) = {
     (tp, q.tp) match {
-       case (QE(d), QE(e)) if d == e => Quantity(QESubtract(d, value, q.value), QE(d))
+       case (QE(d), QE(e)) if d == e => MQuantity(QESubtract(d, value, q.value), QE(d))
        case _ => throw new GeneralError("Subtraction doesn't make sense for : " + (tp, q.tp))
     }
   }
-  def exp(q: Quantity) = {
+  def exp(q: MQuantity) = {
     (tp, q.tp) match {
-      case (QE(d), QE(e)) if e == DimNone && d == DimNone => Quantity(QEExp(value, q.value), QE(d))
+      case (QE(d), QE(e)) if e == DimNone && d == DimNone => MQuantity(QEExp(value, q.value), QE(d))
       case _ => throw new GeneralError("Exponentiation doesn't make sense for : " + (tp, q.tp))
     }
   }
-  def equal(q: Quantity): Formula = {
+  def equal(q: MQuantity): Formula = {
     (tp, q.tp) match {
        case (QE(d), QE(e)) if d == e => Formula(d, value, q.value)
        case _ => throw new scala.MatchError("Error")
     }
   }
-  
+  */
   private class Replacer(path: GlobalName, term: Term) extends StatelessTraverser {
     def traverse(t: Term)(implicit con : Context, state : State) = t match {
       case OMS(p) if p == path => term
@@ -66,9 +68,9 @@ case class Quantity(value: Term, tp:Term, isField: Boolean = false, isConstant: 
     }
   }
   
-  def substitute(p: GlobalName, q: Quantity) = {
+  def substitute(p: GlobalName, q: MQuantity) = {
     val vR = (new Replacer(p, q.value)).apply(value, Context.empty)
-    Quantity(vR, tp)
+    MQuantity(vR, tp)
   }
   
   
@@ -98,18 +100,20 @@ abstract class MPDComponent
 
 case class QuantitySpaceDecl(parent: MPath, name: LocalName) extends MPDComponent
 
+case class GeometryDecl(parent: MPath, name: LocalName) extends MPDComponent
+
 case class IntegrationSurfaceDecl(parent: MPath, name: LocalName) extends MPDComponent
 
 trait MPDNode
 
-case class QuantityDecl(parent: MPath, name: LocalName, dim: Term, df: Option[Quantity], isField: Boolean, isConstant: Boolean) extends MPDComponent with MPDNode {
+case class QuantityDecl(parent: MPath, name: LocalName, l: Term, geom: Term , dim: Term, tens: Term, df: Option[MQuantity], isField: Boolean, isConstant: Boolean) extends MPDComponent with MPDNode {
   def path = parent ? name // '?' forms global name
-  def toQuantity = Quantity(OMS(path), QE(dim), isField, isConstant)
+  def toQuantity = MQuantity(OMS(path), Quantity(l, geom, dim, tens), isField, isConstant)
 }
 
 
 // A rule is an equation solved for a variable
-case class Rule(solved: GlobalName, solution: Quantity)
+case class Rule(solved: GlobalName, solution: MQuantity)
 
 // A law is a named container of all rules of an equation/formula
 case class Law(parent: MPath, name: LocalName, formula: Formula, rules: List[Rule], isComputational: Boolean = true) extends MPDComponent with MPDNode{
@@ -119,7 +123,7 @@ case class Law(parent: MPath, name: LocalName, formula: Formula, rules: List[Rul
   
   def uses(quantityGlobalName: GlobalName) = usedQuantities contains quantityGlobalName  
     
-  def getSolution(q: GlobalName): Option[Quantity] = rules.find(_.solved == q).map(_.solution)
+  def getSolution(q: GlobalName): Option[MQuantity] = rules.find(_.solved == q).map(_.solution)
   
   // a law is functional for a quantity q if it can be expressed in the form q = l(a, b, c, ..) a, b, c, .. != q 
   def isFunctional(q: GlobalName) = rules.find(_.solved == q) == None || rules.find(x => x.solved == q && x.solution.contains(q)) == None
@@ -400,24 +404,24 @@ class MPDSolver(val mpd: MPD, val initialState: MPDState) {
 }
 
 object EvaluateQuantity {
-  def apply(quantity: Quantity, vMap: Map[LocalName, Option[ImpreciseFloat]]): ImpreciseFloat = {
+  def apply(quantity: MQuantity, vMap: Map[LocalName, Option[ImpreciseFloat]]): ImpreciseFloat = {
     quantity match {   
-      case Quantity(QEMul(d1, d2, v1, v2), ft, _, _) => 
-        EvaluateQuantity(Quantity(v1, ft), vMap) * EvaluateQuantity(Quantity(v2, ft), vMap) 
-      case Quantity(QEDiv(d1, d2, v1, v2), ft, _, _) => 
-        EvaluateQuantity(Quantity(v1, ft), vMap) / EvaluateQuantity(Quantity(v2, ft), vMap) 
-      case Quantity(QEAdd(d, v1, v2), ft, _, _) => 
-        EvaluateQuantity(Quantity(v1, ft), vMap) + EvaluateQuantity(Quantity(v2, ft), vMap)
-      case Quantity(QESubtract(d, v1, v2), ft, _, _) => 
-        EvaluateQuantity(Quantity(v1, ft), vMap) - EvaluateQuantity(Quantity(v2, ft), vMap)
-      case Quantity(OMS(path), ft, _, _) if vMap(path.name).get != None => return vMap(path.name).get
+      case MQuantity(QuantityMul(d1, d2, g1, g2, l, t, v1, v2), ft, _, _) => 
+        EvaluateQuantity(MQuantity(v1, ft), vMap) * EvaluateQuantity(MQuantity(v2, ft), vMap) 
+      case MQuantity(QuantityDiv(d1, d2, g1, g2, l, t, v1, v2), ft, _, _) => 
+        EvaluateQuantity(MQuantity(v1, ft), vMap) / EvaluateQuantity(MQuantity(v2, ft), vMap) 
+      case MQuantity(QuantityAdd(d, g1, g2, l, t, v1, v2), ft, _, _) => 
+        EvaluateQuantity(MQuantity(v1, ft), vMap) + EvaluateQuantity(MQuantity(v2, ft), vMap)
+      case MQuantity(QuantitySubtract(d, g1, g2, l, t, v1, v2), ft, _, _) => 
+        EvaluateQuantity(MQuantity(v1, ft), vMap) - EvaluateQuantity(MQuantity(v2, ft), vMap)
+      case MQuantity(OMS(path), ft, _, _) if vMap(path.name).get != None => return vMap(path.name).get
       case _ => throw new scala.MatchError("Math Error")
     }
   }
 }
 
 object RuleToJSON {
-  def JSONifyQuantity(q: Quantity): JSON = doQ(q.value)
+  def JSONifyQuantity(q: MQuantity): JSON = doQ(q.value)
   private def doQ(t: Term): JSON = t match {
     case OMA(OMID(path), List(d1,d2,v1,v2)) => 
       JSONObject(

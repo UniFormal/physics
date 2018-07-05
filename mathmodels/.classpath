@@ -5,6 +5,6 @@
 	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
 	<classpathentry combineaccessrules="false" kind="src" path="/mmt-api"/>
 	<classpathentry combineaccessrules="false" kind="src" path="/mmt-lf"/>
-	<classpathentry combineaccessrules="false" kind="src" path="/MitM-Foundation"/>
+	<classpathentry combineaccessrules="false" kind="src" path="/Foundation"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

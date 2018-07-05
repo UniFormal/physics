@@ -1,6 +1,5 @@
 *.class
 *.log
-*.~
-*.scala#
-*.scala~
+*~
+*#
 /bin/

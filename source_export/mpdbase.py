@@ -29,6 +29,8 @@ class MPDBase(object):
 
 		self.graph = []
 
+                self.cycles = None
+
 	def init_laws(self):
 		pass
 
@@ -53,6 +55,29 @@ class MPDBase(object):
 		
 		return s
 
+        def init_cycles(self):
+                def traverse(hist):
+                        start = hist[0]
+                        for edge in self.graph:
+                                # edge[0] is quantity node, edge[1] is law node
+                                if edge[1] == hist[0][1]:
+                                        continue
+                                
+                                if not self.laws[edge[1]].uses_quantity_of_name(hist[0][0]):
+                                        continue
+
+                                if edge not in hist:
+                                        if edge[0] in map(lambda x: x[0], hist):
+                                                # edge is partially in; kill it
+                                                traverse(hist.append(edge))
+                                        elif len(hist) > 2 and edge == hist[-1]:
+                                                self.cycles.append(Cycle(hist).normalize())
+
+                for edge in graph:
+                        traverse([edge])
+
+                # we cast to set to remove repeating elements
+                self.cycles = list(set(self.cycles))
 
 class Declaration:
 	def __init__(self, name, parent):
@@ -116,6 +141,9 @@ class Law(Declaration):
 		s += "used quantities: " + ','.join(self.used_quantities)
 		return s
 
+        def uses_quantity_of_name(self, name):
+                return name in self.used_quantities
+        
         def test_law(self, state):
                 return self.law_test(state)
 
@@ -171,6 +199,9 @@ class MPDState:
 	def copy_to(self, other_state):
 		other_state.copy_from(self)
 
+class TacticBase:
+        def __init__():
+                pass
 
 def derivative_on_space(image, dom):
 	deriv = numpy.diff(image)/numpy.diff(dom)

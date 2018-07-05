@@ -7,20 +7,22 @@ import symbols._
 import archives._
 import utils._
 import objects._
-
-import info.kwarc.mmt.lf._
-
+ 
 import info.mathhub.lf.MitM.Foundation._
 import Units.Units._
 import Units.Dimensions._
-import Units.QEBase._
-import Units.Field._
+import Units.QuantityBase._
+import Units.LawBase._
+import Units.GeometryBase._
+import Units.TacticBase._
+import Units.BoundaryConditionBase._
 
 /**
- * run via build mpd-python ARCHIVE
+ * run via build ARCHIVE mpd-python
+ * e.g: build MitM/Foundation mpd-python
  */
+
 class PythonExporter extends Exporter {
-  
   override val outExt = "py"
   
   val constants = Map("zero" -> "0", "one" -> "1", "pi" -> "numpy.pi")
@@ -47,56 +49,40 @@ class PythonExporter extends Exporter {
     val expression: String = makeQuantityPyExpression(quantityValue)
     
     private def makeQuantityPyExpression(q : Term): String = q match {
-      case QEMinus(d, v) => 
+      case QuantityNeg(d, g, l, t, v) => 
         s"(- ${makeQuantityPyExpression(v)})" 
-      case FieldMinus(d, v) => 
-        s"(- ${makeQuantityPyExpression(v)})" 
-        
-      case QEMul(d1, d2, v1, v2) => 
+     
+      case QuantityMul(d1, d2, g1, g2, l, t, v1, v2) => 
         s"(${makeQuantityPyExpression(v1)} * ${makeQuantityPyExpression(v2)})" 
-      case FieldMul(d1, d2, v1, v2) => 
+      case QuantityLScalarMul(d1, d2, g1, g2, l, t, v1, v2) => 
         s"(${makeQuantityPyExpression(v1)} * ${makeQuantityPyExpression(v2)})" 
-        
-      case QEDiv(d1, d2, v1, v2) => 
+      case QuantityRScalarMul(d1, d2, g1, g2, l, t, v1, v2) => 
+        s"(${makeQuantityPyExpression(v1)} * ${makeQuantityPyExpression(v2)})" 
+      
+      case QuantityDiv(d1, d2, g1, g2, l, t, v1, v2) => 
         s"(${makeQuantityPyExpression(v1)} / ${makeQuantityPyExpression(v2)})" 
-      case FieldDiv(d1, d2, v1, v2) => 
+      case QuantityLScalarDiv(d1, d2, g1, g2, l, t, v1, v2) => 
         s"(${makeQuantityPyExpression(v1)} / ${makeQuantityPyExpression(v2)})" 
-        
-      case QEAdd(d, v1, v2) => 
+      case QuantityRScalarDiv(d1, d2, g1, g2, l, t, v1, v2) => 
+        s"(${makeQuantityPyExpression(v1)} / ${makeQuantityPyExpression(v2)})" 
+       
+      case QuantityAdd(d, l, t, g1, g2, v1, v2) => 
         s"(${makeQuantityPyExpression(v1)} + ${makeQuantityPyExpression(v2)})" 
-      case FieldAdd(d, v1, v2) => 
-        s"(${makeQuantityPyExpression(v1)} + ${makeQuantityPyExpression(v2)})" 
-        
-      case QESubtract(d, v1, v2) => 
-        s"(${makeQuantityPyExpression(v1)} - ${makeQuantityPyExpression(v2)})" 
-      case FieldSubtract(d, v1, v2) => 
+      
+      case QuantitySubtract(d, g1, g2, l, t, v1, v2) => 
         s"(${makeQuantityPyExpression(v1)} - ${makeQuantityPyExpression(v2)})" 
         
-      case QEExp(v1, v2) => 
-        s"(${makeQuantityPyExpression(v1)} ** ${makeQuantityPyExpression(v2)})" 
-      case FieldExp(v1, v2) => 
-        s"(${makeQuantityPyExpression(v1)} ** ${makeQuantityPyExpression(v2)})"
+      case QuantityExp(g, v) =>
+        s"numpy.exp(${makeQuantityPyExpression(v)})"
         
-      case QEEExp(v1) =>
-        s"numpy.exp(${makeQuantityPyExpression(v1)})"
-      case FieldEExp(v1) =>
-        s"numpy.exp(${makeQuantityPyExpression(v1)})"
+      case QuantityLog(g, v) =>
+        s"(numpy.log(${makeQuantityPyExpression(v)})"
         
-      case QELog(v1, v2) =>
-        s"(numpy.log(${makeQuantityPyExpression(v1)})/numpy.log(${makeQuantityPyExpression(v2)}))"
-      case QEELog(v1) =>
-        s"numpy.log(${makeQuantityPyExpression(v1)})"
+      case QuantityGradient(d, g, v) =>
+        s"(gradient(${makeQuantityPyExpression(v)}, self.space))" 
         
-      case FieldEExp(v1) =>
-        s"numpy.exp(${makeQuantityPyExpression(v1)})"
-
-      case FieldLog(v1, v2) =>
-        s"(numpy.log(${makeQuantityPyExpression(v1)})/numpy.log(${makeQuantityPyExpression(v2)}))"
-      case FieldELog(v1) =>
-        s"numpy.log(${makeQuantityPyExpression(v1)})"
-        
-      case FieldDeriv(d, v) => 
-        s"(derivative_on_space(${makeQuantityPyExpression(v)}, self.space))" 
+      case QuantityDivergence(d, g, n, v) =>
+        s"(divergence(${makeQuantityPyExpression(v)}, self.space))" 
         
       case OMS(path) => {
         val name = path.name.toString
@@ -114,10 +100,10 @@ class PythonExporter extends Exporter {
         else 
           n.toPath
       
-      case ApplyGeneral(f, x) => println(q)
-        val OMS(path) = f
-        parameters ::= path.name.toString
-        state + "['" + ensureIdentifierString(path.name.toString) + "']" 
+     // case ApplyGeneral(f, x) => println(q)
+     //   val OMS(path) = f
+     //   parameters ::= path.name.toString
+     //   state + "['" + ensureIdentifierString(path.name.toString) + "']" 
       
       case OMA(OMID(path), _) =>
         throw LocalError("Undefined operation: " + q.toString())
@@ -218,7 +204,11 @@ ${pyIndent(2)}${lawsPyAttributes(mpd).map{
   def exportTheory(thy: DeclaredTheory, bf: BuildTask) {
     println(thy.name)
     val pyOpt = thy.meta match {
-       case Some(x) if x.toString() == "http://mathhub.info/MitM/Models?MPD" => constructPyFromMPD(mpdtool.toMPD(thy))
+       case Some(x) if x.toString() == "http://mathhub.info/MitM/Foundation/Units?ModelBase" => {
+         println(mpdtool.toMPD(thy).toString())
+         constructPyFromMPD(mpdtool.toMPD(thy))
+                
+       }
        case _ => return
     }
     
@@ -236,7 +226,3 @@ ${pyIndent(2)}${lawsPyAttributes(mpd).map{
   
   def exportView(view: DeclaredView, bf: BuildTask) {}
 }
-
-/*
- * 
- */
