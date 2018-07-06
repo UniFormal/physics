@@ -27,8 +27,6 @@ import info.mathhub.lf.MitM.Foundation.Tensors._
 class PythonExporter extends Exporter {
   override val outExt = "py"
   
-  val constants = Map("zero" -> "0", "one" -> "1", "pi" -> "numpy.pi")
-  
   val key = "mpd-python"
   private lazy val mpdtool = {
     val m = new MPDTool
@@ -45,7 +43,7 @@ class PythonExporter extends Exporter {
     out
   }
   
-  private class QuantityPyExpression(state: String, quantityValue: Term) {
+  private class QuantityPyExpression(state: String, quantityValue: Term, mustBeStateless: Boolean = false) {
     var parameters: List[String] = Nil
     
     val expression: String = makeQuantityPyExpression(quantityValue)
@@ -89,24 +87,17 @@ class PythonExporter extends Exporter {
       case MakeQuantity(l, g, d, t, lr) =>
         s"(${makePyTensor(l, lr)})"
       case MakeQuantityOnGeometry(l, g, d, t, lr) =>
-        //throw new GeneralError(makePyTensor(l, lr))
         s"(${makePyTensor(l, lr)})"
         
       case OMS(path) => {
-        val name = path.name.toString
-        if (constants contains name)
-          constants(name)
-        else{
-          parameters ::= path.name.toString
-          state + "['" + ensureIdentifierString(path.name.toString) + "']"
-        }
+        if (mustBeStateless)
+          throw GeneralError("The following quantity must be stateless: " + quantityValue.toString)
+        parameters ::= path.name.toString
+        state + "['" + ensureIdentifierString(path.name.toString) + "']"
       }
       
-      case OMV(n) => println(n.toPath)
-        if (constants contains n.toPath)
-          constants(n.toPath)
-        else 
-          n.toPath
+      case OMV(n) => println(n.toPath) 
+        n.toPath
       
      // case ApplyGeneral(f, x) => println(q)
      //   val OMS(path) = f
@@ -121,12 +112,18 @@ class PythonExporter extends Exporter {
   }
   
   private def makePyTensor(tensorRankList: Term, tensorElementsList: Term): String = {
-    // val tensorRankDims = makeListFromListTerm(tensorRankList).map(s => s.asInstanceOf[Integer])
+    val tensorRankDims = makeListFromListTerm(tensorRankList).map(s => s.toInt)
     val tensorElements = makeListFromListTerm(tensorElementsList)
-    // val numberOfElementsRequired = tensorRankDims.foldRight(1){(acc, i)=>(acc *(i+1)) }
-    // if (numberOfElementsRequired != tensorElements.size)
-    //   throw new GeneralError("Tensor rank incompatable with number of elements")
-    getNumericalListPy(tensorElements)
+    val numberOfElementsRequired = tensorRankDims.foldRight(1){(acc, i)=>(acc *(i)) }
+    if (numberOfElementsRequired != tensorElements.size)
+       throw new GeneralError("Tensor rank incompatable with number of elements: " + numberOfElementsRequired.toString)
+    def form_tensor_recursive(l: List[String], dims: List[Int]) : String = {
+      dims match {
+        case h::t => getObjectListPy(l.grouped(dims.foldRight(1){(acc,i)=>(acc *(i))}/h).toList.map(s=>form_tensor_recursive(s, t)))
+        case Nil => if (l.size == 1) l(0) else getObjectListPy(l)
+      }
+    }
+    s"numpy.array(${form_tensor_recursive(tensorElements, tensorRankDims)})"
   }
   
   private def makeListFromListTerm(l: Term): List[String] = {
@@ -160,8 +157,13 @@ class PythonExporter extends Exporter {
   private def getStringListPy(list :List[String]): String =
     list.mkString("['", "' ,'", "']")
   
-  private def getNumericalListPy(list: List[String]): String = 
-    list.mkString("numpy.array([", " ,", "])")
+  private def getObjectListPy(list: List[String]): String = 
+    list.mkString("[", " ,", "]")
+    
+  private def makeConstQuantityExpression(value: Term): String = {
+    val expr = new QuantityPyExpression("", value, true)
+    expr.expression
+  }
     
   private def quantityDeclsPyAttributes(mpd: MPD) = {
     mpd.quantityDecls.map(q => {
@@ -176,7 +178,7 @@ class PythonExporter extends Exporter {
           "is_constant" -> {if (q.isConstant) "True" else "False"}
       )
       if (q.df != None)
-        (parameters:+("compute" -> makeExpressionPyLambda("state", q.df.get.value))).toMap
+        (parameters:+("initial_value" -> makeConstQuantityExpression(q.df.get.value))).toMap
       else  
         parameters.toMap
     })
