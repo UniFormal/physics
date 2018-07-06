@@ -270,14 +270,11 @@ case class MPD(parent: DPath, name: LocalName, quantityDecls: List[QuantityDecl]
   
   
   
-  def prettyListCycles = cycles.map(_.reverse.steps.map(x=>(x.law.name, x.quantityDecl.name)))
+  def prettyListCycles = cycles.map(_.reverse.steps.map(x=>(x.law.name.toString(), x.quantityDecl.name.toString())))
   
     //List(cycles2(0), cycles2(0).reverse).map(_.steps.map(x=>(x.law.name, x.quantityDecl.name)))
   
 }
-
-//don't need mutable
-//import scala.collection.mutable.Map
 
 // an assignment of physical quantities to every quantity declaration
 case class MPDState(value: Map[QuantityDecl, Option[ImpreciseFloat]]){

@@ -28,9 +28,9 @@ class PythonExporter extends Exporter {
   override val outExt = "py"
   
   val key = "mpd-python"
+  
   private lazy val mpdtool = {
-    val m = new MPDTool
-    initOther(m)
+    val m = new MPDTool(controller)
     m
   }
   
@@ -241,9 +241,7 @@ ${pyIndent(2)}${lawsPyAttributes(mpd).map{
     println(thy.name)
     val pyOpt = thy.meta match {
        case Some(x) if x.toString() == "http://mathhub.info/MitM/Foundation/Units?ModelBase" => {
-         println(mpdtool.toMPD(thy).toString())
-         constructPyFromMPD(mpdtool.toMPD(thy))
-                
+         constructPyFromMPD(mpdtool.toMPD(thy))                
        }
        case _ => return
     }

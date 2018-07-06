@@ -19,20 +19,7 @@ import Units.TacticBase._
 import Units.BoundaryConditionBase._
 
 
-class MPDTool extends ShellExtension("mpd") { 
-   def helpText: String = "This is the MPD Tool."
-
-   def run(shell: Shell, args: List[String]) = {
-     controller.handleLine("log console")
-     controller.handleLine("server on 8080")
-     val p = Path.parseM(args(0), NamespaceMap.empty)
-     //println(args(0))
-     
-     val mpd = toMPD(p)
-     println(mpd.get.prettyListCycles)
-     true
-   }
-   
+class MPDTool(controller: Controller) {    
    def toFormula(t: Term): Formula = {
      t match { 
        // TODO: let Formula take dimension instead of type
@@ -118,32 +105,6 @@ class MPDTool extends ShellExtension("mpd") {
                  println("Step: ", a)
                  None
                  
-               /*
-               case Logic.ded(x) =>
-                 val formula = toFormula(x)
-                 Law(c.parent, c.name, formula, getRules(formula), c.rl != Some("Condition"))
-   
-               case QE(d) =>
-                 if (c.rl != None && c.rl.get != "Constant")
-                   throw new GeneralError("Unknown role given to MPD quantity")
-                 val df = c.df.map{t => toQuantity(t, d)}
-                 QuantityDecl(c.parent, c.name, d, df, false, c.rl == Some("Constant"))
-                 
-               case field(d) => {
-                 if (c.rl != None && c.rl.get != "Constant")
-                   throw new GeneralError("Unknown role given to MPD quantity: " + c.rl.get)
-                 val df = c.df.map{t => toQuantity(t, d)}
-                 QuantityDecl(c.parent, c.name, d, df, true, c.rl == Some("Constant"))  
-               }
-               
-               
-               case surface(p) =>
-                 IntegrationSurfaceDecl(c.parent, c.name)
-               case space(p) => 
-                 QuantitySpaceDecl(c.parent, c.name)
-                 
-               */
-                 
                case d =>
                  throw new GeneralError("Unknown construction of MPD component: " + c.name.toString() + "..." +   d.toString())
              }
@@ -167,8 +128,6 @@ class MPDTool extends ShellExtension("mpd") {
    
    def toMPD(p: MPath): Option[MPD] = {
      val thy = controller.get(p).asInstanceOf[DeclaredTheory]
-     println(thy.toString)
-     //None
      thy.meta match {
        case Some(x) if x.toString() == "http://mathhub.info/MitM/Models?MPD" => toMPD(thy)
        case _ => throw new GeneralError("Error: Theory must be a meta theory of http://mathhub.info/MitM/Models?MPD")
@@ -176,7 +135,6 @@ class MPDTool extends ShellExtension("mpd") {
    }
    
    def toMPD(thy: DeclaredTheory): Option[MPD] = {
-     println("hodge")
      val meta = thy.meta.getOrElse(return None)
      println(meta)
      if (meta.toString() != "http://mathhub.info/MitM/Foundation/Units?ModelBase")

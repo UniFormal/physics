@@ -1,14 +1,29 @@
 #+TITLE: Physical MPD Models MMT Extension
 
 * About
+Provides build targets for physical models formulated in [[https://uniformal.github.io/][MMT]]. 
 
-Provides build targets for physical models formulated in [[https://uniformal.github.io/doc/api/][MMT]]. 
+* Extract model statistics
+To load the extension for exporting MMT model theories into python, run in the
+ mmt shell:
+#+BEGIN_SRC
+  extension uniformal.physics.MPDStatsExporter  
+#+END_SRC
+and then proceed to generate statistics files corresponding to the theories with:
+#+BEGIN_SRC
+  build MitM/Models mpd-stats
+#+END_SRC
+Currently, the files will contain functional cycles present in the models. 
+
 
 * Python
 To load the extension for exporting MMT model theories into python, run in the
  mmt shell:
-
 #+BEGIN_SRC
-  extension uniformal.physics.PythonExporter
+  extension uniformal.physics.PythonExporter  
+#+END_SRC
+and then proceed to generate python files corresponding to the theories with:
+#+BEGIN_SRC
   build MitM/Models mpd-python  
 #+END_SRC
+
