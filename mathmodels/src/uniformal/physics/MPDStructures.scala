@@ -111,9 +111,12 @@ case class QuantityDecl(parent: MPath, name: LocalName, l: Term, geom: Term , di
   def toQuantity = MQuantity(OMS(path), Quantity(l, geom, dim, tens), isField, isConstant)
 }
 
+case class ChainLink(law1: GlobalName, law2: GlobalName)
+
+case class Chain(chainLinks: List[GlobalName]) extends MPDComponent
 
 // A rule is an equation solved for a variable
-case class Rule(solved: GlobalName, solution: MQuantity)
+case class Rule(solved: GlobalName, solution: MQuantity, ruleNumber: Int)
 
 // A law is a named container of all rules of an equation/formula
 case class Law(parent: MPath, name: LocalName, formula: Formula, rules: List[Rule], isComputational: Boolean = true) extends MPDComponent with MPDNode{
@@ -164,17 +167,17 @@ case class BigStep(steps: List[Step]) {
   // a path is functional if every step is
   def isFunctional = steps.map(_.isFunctional).foldRight(true){(x,y) => x && y}
   
-  def toRule: Option[Rule] = {
+  def toRule(ruleNumber: Int): Option[Rule] = {
     val q = steps.last.quantityDecl
     val t = steps.foldRight(q.toQuantity) {case (next, sofar) =>
        val s = next.law.getSolution(next.quantityDecl.path).getOrElse{return None}
        sofar.substitute(next.quantityDecl.path, s)
     }
-    Some(Rule(q.path, t))
+    Some(Rule(q.path, t, ruleNumber))
   }
 }
 
-// Constant -> Law -> (Constant -> Law)+
+// Quantity -> Law -> (Quantity -> Law)+
 case class Cycle(steps: List[Step]) {
   private[this] def rotate(remain: List[Step], over: List[Step], pred: Step => Boolean): List[Step] = remain match {
     case h::t if pred(h) => h::t ++ (over.reverse)
@@ -353,7 +356,7 @@ class MPDSolver(val mpd: MPD, val initialState: MPDState) {
          if (!t.check)
            return
          
-         val fixedpointRule = p.toRule.get
+         val fixedpointRule = p.toRule(0).get
          val f = utils.File("mpdout/outmpd.json")
          utils.File.write(f, RuleToJSON(fixedpointRule).toString())
          

@@ -5,7 +5,7 @@ import frontend._
 import modules._
 import objects._
 import symbols._
-
+import scala.util.matching.Regex
 
 import info.kwarc.mmt.lf._
 
@@ -20,8 +20,10 @@ import Units.BoundaryConditionBase._
 
 
 class MPDTool(controller: Controller) {    
-   def toFormula(t: Term): Formula = {
-     t match { 
+  val ruleRegex = """^([\p{L}_]+)?(_rule(\d+))?$""".r
+  
+  def toFormula(t: Term): Formula = {
+    t match { 
        // TODO: let Formula take dimension instead of type
        case Logic._eq(tp, lhs, rhs) => {
          val solvedPath = lhs match {
@@ -48,8 +50,9 @@ class MPDTool(controller: Controller) {
    }
    
    def toQuantity(value: Term, tp: Term): MQuantity = MQuantity(value, tp)
+  
    
-   def getRules(formula: Formula): List[Rule] = {
+   def getRule(formula: Formula, ruleNumber: Int): List[Rule] = {
          val solvedPath = formula.lhs match {
            case OMS(p) => p
            case ApplyGeneral(f, x) =>
@@ -57,7 +60,16 @@ class MPDTool(controller: Controller) {
              p
            case _ => throw new GeneralError("LHS of rule should be a constant symbol")
          }
-         List(Rule(solvedPath, toQuantity(formula.rhs, formula.tp))) 
+         List(Rule(solvedPath, toQuantity(formula.rhs, formula.tp), ruleNumber)) 
+   }
+   
+   def toChain(tp: Term): Chain = {
+     def getChainList(t: Term): List[GlobalName] =
+     t match {
+       case ChainAggregate(agg, OMS(lawpath)) => lawpath::getChainList(agg)
+       case MakeChain(OMS(law1path), OMS(law2path)) => law1path::law2path::Nil
+     }
+     Chain(getChainList(tp))
    }
    
    def toEqualityLaw(parent: MPath, name: LocalName, lhs: Term, rhs: Term, dim: Term, dom: Term, rl: Option[String]) : Law = {
@@ -69,7 +81,21 @@ class MPDTool(controller: Controller) {
        case _ => throw new GeneralError("LHS of rule should be a constant symbol, not " + lhs.toString)
      }
      val formula = Formula(dim, lhs, rhs)
-     Law(parent, name, formula, getRules(formula), rl != Some("Condition"))
+     val (lawName, ruleNumber) = getRuleNameData(name.toString)
+     Law(parent, LocalName.parse(lawName), formula, getRule(formula, ruleNumber), rl != Some("Condition"))
+   }
+   
+   def getRuleNameData(name: String): (String, Int) = {
+     ruleRegex.findAllIn(name).matchData.map({
+       m: Regex.Match => {
+         val baseName = m.group(1)
+         val ruleNumber = m.group(3) match {
+           case null => 0
+           case a: String => a.toInt 
+         }
+         (baseName, ruleNumber)
+       }
+     }).toList(0)
    }
    
    def toMPDComponent(c: Constant): Option[MPDComponent] = {
@@ -79,7 +105,6 @@ class MPDTool(controller: Controller) {
              
            case Some(t) =>
              val FunType(args, ret) = t
-             
              ret match {
                
                case Quantity(l, geom, dim, tens) =>
@@ -102,11 +127,10 @@ class MPDTool(controller: Controller) {
                  None
                  
                case GetStepType(a) =>
-                 println("Step: ", a)
-                 None
+                 Some(toChain(a))
                  
                case d =>
-                 throw new GeneralError("Unknown construction of MPD component: " + c.name.toString() + "..." +   d.toString())
+                 throw new GeneralError("Unknown construction of MPD component: " + c.name.toString + "..." +   d.toString())
              }
          }
    }
@@ -152,15 +176,14 @@ class MPDTool(controller: Controller) {
          case qd if qd.isInstanceOf[QuantityDecl]  => quantityDecls ::= qd.asInstanceOf[QuantityDecl]
          case law if law.isInstanceOf[Law] => {
            val newLaw :Law = law.asInstanceOf[Law]
-           val nameSegs = newLaw.name.toString.split("_")
-           if (nameSegs.last.startsWith("rule")){
-             val index = laws.indexWhere{l => l.name.toString() == nameSegs.init.mkString("_")}
-             if (index != -1){
-               val oldl = laws(index)
-               laws = laws.patch(index, Seq(Law(oldl.parent, oldl.name, oldl.formula, oldl.rules ++ newLaw.rules)), 1)
-             }
-           }else
+           val (lawName, ruleNumber) = getRuleNameData(newLaw.name.toString)
+           val index = laws.indexWhere{l => l.name.toString() == lawName}
+           if (index != -1){
+             val oldl = laws(index)
+             laws = laws.patch(index, Seq(Law(oldl.parent, oldl.name, oldl.formula, oldl.rules ++ newLaw.rules)), 1)
+           } else {
              laws ::= newLaw
+           }
          }
          case geom if geom.isInstanceOf[GeometryDecl] => geometryDecls ::= geom.asInstanceOf[GeometryDecl]
          case surface if surface.isInstanceOf[IntegrationSurfaceDecl] =>
