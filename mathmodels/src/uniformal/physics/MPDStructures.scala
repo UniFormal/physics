@@ -8,14 +8,12 @@ import info.mathhub.lf.MitM.Foundation._
 
 import Units.Units._
 import Units.Dimensions._
-import Units.Field._
 import Units.QuantityBase._
 import Units.GeometryBase._
 import Units.BoundaryConditionBase._
 import Units.TacticBase._
 
-//case class 
- 
+
 case class MQuantity(value: Term, tp:Term, isField: Boolean = false, isConstant: Boolean = false) {
   def times(q: MQuantity) = {
     (tp, q.tp) match {
@@ -25,42 +23,41 @@ case class MQuantity(value: Term, tp:Term, isField: Boolean = false, isConstant:
        case _ => throw new GeneralError("Multiplication doesn't make sense for : " + (tp, q.tp))
     }
   }
-/*  
+  
   def div(q: MQuantity) = {
     (tp, q.tp) match {
-       case (QE(d), QE(e)) => MQuantity(QEDiv(d, e, value, q.value), QE(DimDiv(d,e)), false)
-       case (field(d), QE(e)) => MQuantity(FieldDiv(d, e, value, q.value), field(DimDiv(d,e)), true) 
-       case (QE(d), field(e)) => MQuantity(FieldDiv(d, e, value, q.value), field(DimDiv(d,e)), true) 
-       case (field(d), field(e)) => MQuantity(FieldDiv(d, e, value, q.value), field(DimDiv(d,e)), true) 
+       case (Quantity(l1, g1, d1, t1), Quantity(l2, g2, d2, t2)) if l1 == l2 && t1 == t2 => 
+         MQuantity(QuantityDiv(d1, d2, g1, g2, l1, t1, value, q.value), 
+             Quantity(l1, GeometryIntersection(g1, g2), DimDiv(d1,d2), t1), false)
        case _ => throw new GeneralError("Division doesn't make sense for : " + (tp, q.tp))
     }
   }
+  
   def add(q: MQuantity) = {
     (tp, q.tp) match {
-       case (QE(d), QE(e)) if d == e => MQuantity(QEAdd(d, value, q.value), QE(d), false)
-       case (field(d), field(e)) => MQuantity(FieldAdd(d, value, q.value), field(d), true) 
+       case (Quantity(l1, g1, d1, t1), Quantity(l2, g2, d2, t2)) if l1 == l2 && t1 == t2 && d1 == d2 => 
+         MQuantity(QuantityAdd(d1, d2, g1, g2, l1, t1, value, q.value), 
+             Quantity(l1, GeometryIntersection(g1, g2), d1, t1), false)
        case _ => throw new GeneralError("Addition doesn't make sense for : " + (tp, q.tp))
     }
   }
-  def sub(q: MQuantity) = {
+  
+  def subtract(q: MQuantity) = {
     (tp, q.tp) match {
-       case (QE(d), QE(e)) if d == e => MQuantity(QESubtract(d, value, q.value), QE(d))
+       case (Quantity(l1, g1, d1, t1), Quantity(l2, g2, d2, t2)) if l1 == l2 && t1 == t2 && d1 == d2 => 
+         MQuantity(QuantitySubtract(d1, d2, g1, g2, l1, t1, value, q.value), 
+             Quantity(l1, GeometryIntersection(g1, g2), d1, t1), false)
        case _ => throw new GeneralError("Subtraction doesn't make sense for : " + (tp, q.tp))
     }
   }
-  def exp(q: MQuantity) = {
+  
+/*  def exp(q: MQuantity) = {
     (tp, q.tp) match {
       case (QE(d), QE(e)) if e == DimNone && d == DimNone => MQuantity(QEExp(value, q.value), QE(d))
       case _ => throw new GeneralError("Exponentiation doesn't make sense for : " + (tp, q.tp))
     }
   }
-  def equal(q: MQuantity): Formula = {
-    (tp, q.tp) match {
-       case (QE(d), QE(e)) if d == e => Formula(d, value, q.value)
-       case _ => throw new scala.MatchError("Error")
-    }
-  }
-  */
+ */
   private class Replacer(path: GlobalName, term: Term) extends StatelessTraverser {
     def traverse(t: Term)(implicit con : Context, state : State) = t match {
       case OMS(p) if p == path => term
@@ -90,7 +87,6 @@ case class MQuantity(value: Term, tp:Term, isField: Boolean = false, isConstant:
     vF.apply(value, Context.empty)
     vF.found
   }
-  
 }
 
 case class Formula(tp: Term, lhs: Term, rhs: Term)
@@ -111,13 +107,31 @@ case class QuantityDecl(parent: MPath, name: LocalName, l: Term, geom: Term , di
   def toQuantity = MQuantity(OMS(path), Quantity(l, geom, dim, tens), isField, isConstant)
 }
 
-case class ChainLink(law1: GlobalName, law2: GlobalName)
-
 case class Chain(chainLinks: List[GlobalName]) extends MPDComponent
 
 // A rule is an equation solved for a variable
 case class Rule(solved: GlobalName, solution: MQuantity, ruleNumber: Int)
 
+// A law is a named container of all rules of an equation/formula
+/*case class Law2(parent: MPath, name: LocalName, formula: Formula, isComputational: Boolean = true) extends MPDComponent with MPDNode{
+  def path = parent ? name
+
+  lazy val rules: List[Rule] = {
+    if (formula.lhs
+  }
+  
+  def usedQuantities = rules.map(_.solved)
+  
+  def uses(quantityGlobalName: GlobalName) = usedQuantities contains quantityGlobalName  
+    
+  def getSolution(q: GlobalName): Option[MQuantity] = rules.find(_.solved == q).map(_.solution)
+  
+  // a law is functional for a quantity q if it can be expressed in the form q = l(a, b, c, ..) a, b, c, .. != q 
+  def isFunctional(q: GlobalName) = rules.find(_.solved == q) == None || rules.find(x => x.solved == q && x.solution.contains(q)) == None
+
+  def solvableQuantities(qs: List[QuantityDecl]) = qs.filter(rules.map(_.solved) contains _.path)
+}
+*/
 // A law is a named container of all rules of an equation/formula
 case class Law(parent: MPath, name: LocalName, formula: Formula, rules: List[Rule], isComputational: Boolean = true) extends MPDComponent with MPDNode{
   def path = parent ? name
@@ -166,6 +180,13 @@ case class BigStep(steps: List[Step]) {
   
   // a path is functional if every step is
   def isFunctional = steps.map(_.isFunctional).foldRight(true){(x,y) => x && y}
+
+  def isConnected = steps.foldRight((None: Option[QuantityDecl], true)){
+    (x,y) => y._1 match {
+      case Some(w) => (Some(x.quantityDecl), x.law.isFunctional(w.parent?w.name) && y._2)
+      case None => (Some(x.quantityDecl), true)
+    }
+  }._2
   
   def toRule(ruleNumber: Int): Option[Rule] = {
     val q = steps.last.quantityDecl

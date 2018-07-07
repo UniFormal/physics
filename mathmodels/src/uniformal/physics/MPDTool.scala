@@ -66,8 +66,15 @@ class MPDTool(controller: Controller) {
    def toChain(tp: Term): Chain = {
      def getChainList(t: Term): List[GlobalName] =
      t match {
-       case ChainAggregate(agg, OMS(lawpath)) => lawpath::getChainList(agg)
-       case MakeChain(OMS(law1path), OMS(law2path)) => law1path::law2path::Nil
+       case ChainAggregate(agg, OMS(lawpath)) => {
+         val ChainAggregate(hmm2, hmm) = t 
+         lawpath::getChainList(agg)
+       
+       }
+       case MakeChain(OMS(law1path), OMS(law2path)) => law2path::law1path::Nil
+       case _ => {
+         throw new GeneralError("Unidentified component in chain: " + t.toString)
+       }
      }
      Chain(getChainList(tp))
    }
@@ -170,7 +177,8 @@ class MPDTool(controller: Controller) {
      var integrationSurfaces: List[IntegrationSurfaceDecl] = Nil
      var spaces: List[QuantitySpaceDecl] = Nil
      var geometryDecls: List[GeometryDecl] = Nil
-
+     var functionalChains: List[BigStep] = Nil
+     
      comps foreach { 
        comp => comp match {
          case qd if qd.isInstanceOf[QuantityDecl]  => quantityDecls ::= qd.asInstanceOf[QuantityDecl]
@@ -184,6 +192,22 @@ class MPDTool(controller: Controller) {
            } else {
              laws ::= newLaw
            }
+         }
+         case chain if chain.isInstanceOf[Chain] => {
+           val newChain = chain.asInstanceOf[Chain]
+           val bigStep = BigStep(newChain.chainLinks.map(l => {
+             val (lawName, ruleNumber) = getRuleNameData(l.name.toString)
+             val lawIndex = laws.indexWhere{l => l.name.toString() == lawName}
+             if (lawIndex == -1)
+               throw new GeneralError("Can not find law in chain: " + l.name.toString)
+           
+             val quantityIndex = quantityDecls.indexWhere{q => (q.parent?q.name).toString == laws(lawIndex).rules(ruleNumber).solved.toString}
+             if (quantityIndex == -1)
+               throw new GeneralError("Can not find quantity in the rule is solved for. It appears the law is not functional: " + l.name.toString)
+             
+             Step(laws(lawIndex), quantityDecls(quantityIndex))
+           }))
+           println("Hodge: " + bigStep.isConnected)
          }
          case geom if geom.isInstanceOf[GeometryDecl] => geometryDecls ::= geom.asInstanceOf[GeometryDecl]
          case surface if surface.isInstanceOf[IntegrationSurfaceDecl] =>

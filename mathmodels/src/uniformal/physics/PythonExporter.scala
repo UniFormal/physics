@@ -9,20 +9,8 @@ import utils._
 import objects._
  
 import info.mathhub.lf.MitM.Foundation._
-import Units.Units._
-import Units.Dimensions._
-import Units.QuantityBase._
-import Units.LawBase._
-import Units.GeometryBase._
-import Units.TacticBase._
-import Units.BoundaryConditionBase._
 import info.mathhub.lf.MitM.Foundation.Tensors._
 
-
-/**
- * run via build ARCHIVE mpd-python
- * e.g: build MitM/Foundation mpd-python
- */
 
 class PythonExporter extends Exporter {
   override val outExt = "py"
@@ -43,72 +31,19 @@ class PythonExporter extends Exporter {
     out
   }
   
-  private class QuantityPyExpression(state: String, quantityValue: Term, mustBeStateless: Boolean = false) {
-    var parameters: List[String] = Nil
-    
-    val expression: String = makeQuantityPyExpression(quantityValue)
-    
-    private def makeQuantityPyExpression(q : Term): String = q match {
-      case QuantityNeg(d, g, l, t, v) => 
-        s"(- ${makeQuantityPyExpression(v)})" 
-     
-      case QuantityMul(d1, d2, g1, g2, l, t, v1, v2) => 
-        s"(${makeQuantityPyExpression(v1)} * ${makeQuantityPyExpression(v2)})" 
-      case QuantityLScalarMul(d1, d2, g1, g2, l, t, v1, v2) => 
-        s"(${makeQuantityPyExpression(v1)} * ${makeQuantityPyExpression(v2)})" 
-      case QuantityRScalarMul(d1, d2, g1, g2, l, t, v1, v2) => 
-        s"(${makeQuantityPyExpression(v1)} * ${makeQuantityPyExpression(v2)})" 
-      
-      case QuantityDiv(d1, d2, g1, g2, l, t, v1, v2) => 
-        s"(${makeQuantityPyExpression(v1)} / ${makeQuantityPyExpression(v2)})" 
-      case QuantityLScalarDiv(d1, d2, g1, g2, l, t, v1, v2) => 
-        s"(${makeQuantityPyExpression(v1)} / ${makeQuantityPyExpression(v2)})" 
-      case QuantityRScalarDiv(d1, d2, g1, g2, l, t, v1, v2) => 
-        s"(${makeQuantityPyExpression(v1)} / ${makeQuantityPyExpression(v2)})" 
-       
-      case QuantityAdd(d, l, t, g1, g2, v1, v2) => 
-        s"(${makeQuantityPyExpression(v1)} + ${makeQuantityPyExpression(v2)})" 
-      
-      case QuantitySubtract(d, g1, g2, l, t, v1, v2) => 
-        s"(${makeQuantityPyExpression(v1)} - ${makeQuantityPyExpression(v2)})" 
-        
-      case QuantityExp(g, v) =>
-        s"numpy.exp(${makeQuantityPyExpression(v)})"
-        
-      case QuantityLog(g, v) =>
-        s"(numpy.log(${makeQuantityPyExpression(v)})"
-        
-      case QuantityGradient(d, g, v) =>
-        s"(gradient(${makeQuantityPyExpression(v)}, self.space))" 
-        
-      case QuantityDivergence(d, g, n, v) =>
-        s"(divergence(${makeQuantityPyExpression(v)}, self.space))" 
-        
-      case MakeQuantity(l, g, d, t, lr) =>
-        s"(${makePyTensor(l, lr)})"
-      case MakeQuantityOnGeometry(l, g, d, t, lr) =>
-        s"(${makePyTensor(l, lr)})"
-        
-      case OMS(path) => {
-        if (mustBeStateless)
-          throw GeneralError("The following quantity must be stateless: " + quantityValue.toString)
-        parameters ::= path.name.toString
-        state + "['" + ensureIdentifierString(path.name.toString) + "']"
-      }
-      
-      case OMV(n) => println(n.toPath) 
-        n.toPath
-      
-     // case ApplyGeneral(f, x) => println(q)
-     //   val OMS(path) = f
-     //   parameters ::= path.name.toString
-     //   state + "['" + ensureIdentifierString(path.name.toString) + "']" 
-      
-      case OMA(OMID(path), _) =>
-        throw LocalError("Undefined operation: " + q.toString())
-      case t => throw LocalError("Match Error:" + t.toStr(true))
-    }
-    
+  def makePythonExpression(qElement: QElement) = qElement match {
+    case QMul(x, y) => s"(${x} * ${y})"
+    case QDiv(x, y) => s"(${x} / ${y})"
+    case QAdd(x, y) => s"(${x} + ${y})"
+    case QSubtract(x, y) => s"(${x} - ${y})"
+    case QNeg(x) => s"(- ${x})"
+    case QExp(x) => s"numpy.exp(${x})"
+    case QLog(x) => s"(numpy.log(${x})"
+    case QGradient(x) => s"(gradient(${x}, self.space))"   
+    case QDivergence(x) => s"(divergence(${x}, self.space))" 
+    case QTensorVal(l, lr) => s"(${makePyTensor(l, lr)})"
+    case QSymbol(x, state) => state + "['" + ensureIdentifierString(x) + "']"
+    case t => throw LocalError("Match Error:" + t)
   }
   
   private def makePyTensor(tensorRankList: Term, tensorElementsList: Term): String = {
@@ -140,11 +75,11 @@ class PythonExporter extends Exporter {
   }
   
   
-  private def makeExpressionPyLambda(state: String , qexpr: QuantityPyExpression): String = 
+  private def makeExpressionPyLambda(state: String , qexpr: QuantityStringExpression): String = 
     s"lambda $state: ${qexpr.expression}"
   
   private def makeExpressionPyLambda(state: String, value: Term): String = {
-    val expr = new QuantityPyExpression(state, value)
+    val expr = new QuantityStringExpression(makePythonExpression, state, value)
     makeExpressionPyLambda(state, expr)
   }
   
@@ -161,7 +96,7 @@ class PythonExporter extends Exporter {
     list.mkString("[", " ,", "]")
     
   private def makeConstQuantityExpression(value: Term): String = {
-    val expr = new QuantityPyExpression("", value, true)
+    val expr = new QuantityStringExpression(makePythonExpression, "", value, true)
     expr.expression
   }
     
@@ -186,8 +121,8 @@ class PythonExporter extends Exporter {
     
   private def lawsPyAttributes(mpd: MPD) = 
     mpd.laws.map(l => {
-      val lawLhsExpr = new QuantityPyExpression("state", l.formula.lhs)
-      val lawRhsExpr = new QuantityPyExpression("state", l.formula.rhs)
+      val lawLhsExpr = new QuantityStringExpression(makePythonExpression, "state", l.formula.lhs)
+      val lawRhsExpr = new QuantityStringExpression(makePythonExpression, "state", l.formula.rhs)
       val out = Map(
           "name" -> s"'${l.name.toString}'",
           "parent" -> s"'${l.parent.toString}'",
