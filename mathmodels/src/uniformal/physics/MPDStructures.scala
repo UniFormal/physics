@@ -13,7 +13,7 @@ import Units.GeometryBase._
 import Units.BoundaryConditionBase._
 import Units.TacticBase._
 
-
+@deprecated("use QElement instead", "")
 case class MQuantity(value: Term, tp:Term, isField: Boolean = false, isConstant: Boolean = false) {
   def times(q: MQuantity) = {
     (tp, q.tp) match {
@@ -105,46 +105,55 @@ trait MPDNode
 case class QuantityDecl(parent: MPath, name: LocalName, l: Term, geom: Term , dim: Term, tens: Term, df: Option[MQuantity], isField: Boolean, isConstant: Boolean) extends MPDComponent with MPDNode {
   def path = parent ? name // '?' forms global name
   def toQuantity = MQuantity(OMS(path), Quantity(l, geom, dim, tens), isField, isConstant)
+  def toQSymbol = QSymbol(name.toString, path)
 }
 
 case class Chain(chainLinks: List[GlobalName]) extends MPDComponent
 
 // A rule is an equation solved for a variable
-case class Rule(solved: GlobalName, solution: MQuantity, ruleNumber: Int)
+case class Rule(solved: QSymbol, solution: QElement, ruleNumber: Int)
 
 // A law is a named container of all rules of an equation/formula
-/*case class Law2(parent: MPath, name: LocalName, formula: Formula, isComputational: Boolean = true) extends MPDComponent with MPDNode{
+case class Law(parent: MPath, name: LocalName, formula: Formula, additionalRules: List[Rule], isComputational: Boolean = true) extends MPDComponent with MPDNode{
   def path = parent ? name
 
-  lazy val rules: List[Rule] = {
-    if (formula.lhs
+  lazy val generatedRules: List[Rule] = {
+    val lhs = new QuantityExpression(formula.lhs)
+    val rhs = new QuantityExpression(formula.rhs)
+    
+    def generateRules(lhs: QElement, rhs: QElement): List[(QElement, QElement)] ={
+      lhs match {
+        case QAdd(x, y) => generateRules(x, QSubtract(rhs, y)) ++ generateRules(y, QSubtract(rhs, x))
+        case QSubtract(x, y) => generateRules(x, QAdd(rhs, y)) ++ generateRules(y, QSubtract(rhs, x))
+        case QNeg(x) => generateRules(x, QNeg(rhs))
+        case QMul(x, y) => generateRules(x, QDiv(rhs, y)) ++ generateRules(y, QDiv(rhs, x))
+        case QDiv(x, y) => generateRules(x, QMul(rhs, y)) ++ generateRules(y, QMul(rhs, x))
+        case QExp(x) => generateRules(x, QLog(rhs))
+        case QLog(x) => generateRules(x, QExp(rhs))
+        case _ => (lhs, rhs)::Nil
+      }
+    }
+    (generateRules(lhs.expr, rhs.expr) ++ generateRules(rhs.expr, lhs.expr))
+                 .filter(x => x._1.isInstanceOf[QSymbol] || x._2.isInstanceOf[QSymbol])
+                 .map(x => if (x._1.isInstanceOf[QSymbol]) x else (x._2, x._1))
+                 .distinct
+                 .map(x => Rule(x._1.asInstanceOf[QSymbol], x._2, 1))             
   }
   
-  def usedQuantities = rules.map(_.solved)
-  
-  def uses(quantityGlobalName: GlobalName) = usedQuantities contains quantityGlobalName  
-    
-  def getSolution(q: GlobalName): Option[MQuantity] = rules.find(_.solved == q).map(_.solution)
-  
-  // a law is functional for a quantity q if it can be expressed in the form q = l(a, b, c, ..) a, b, c, .. != q 
-  def isFunctional(q: GlobalName) = rules.find(_.solved == q) == None || rules.find(x => x.solved == q && x.solution.contains(q)) == None
-
-  def solvableQuantities(qs: List[QuantityDecl]) = qs.filter(rules.map(_.solved) contains _.path)
-}
-*/
-// A law is a named container of all rules of an equation/formula
-case class Law(parent: MPath, name: LocalName, formula: Formula, rules: List[Rule], isComputational: Boolean = true) extends MPDComponent with MPDNode{
-  def path = parent ? name
+  lazy val rules = (additionalRules ++ generatedRules)
   
   def usedQuantities = rules.map(_.solved)
   
   def uses(quantityGlobalName: GlobalName) = usedQuantities contains quantityGlobalName  
     
-  def getSolution(q: GlobalName): Option[MQuantity] = rules.find(_.solved == q).map(_.solution)
+  def getSolution(q: GlobalName): Option[QElement] = rules.find(_.solved == q).map(_.solution)
   
   // a law is functional for a quantity q if it can be expressed in the form q = l(a, b, c, ..) a, b, c, .. != q 
-  def isFunctional(q: GlobalName) = rules.find(_.solved == q) == None || rules.find(x => x.solved == q && x.solution.contains(q)) == None
+  def isFunctional(q: GlobalName) = getFunctionalRule(q) != None
 
+  def getFunctionalRule(q: GlobalName): Option[Rule] = rules.find(x => (x.solved == q && 
+                                               !x.solution.contains(QSymbol(q.name.toString, q))))
+                                              
   def solvableQuantities(qs: List[QuantityDecl]) = qs.filter(rules.map(_.solved) contains _.path)
 }
 
@@ -189,12 +198,12 @@ case class BigStep(steps: List[Step]) {
   }._2
   
   def toRule(ruleNumber: Int): Option[Rule] = {
-    val q = steps.last.quantityDecl
-    val t = steps.foldRight(q.toQuantity) {case (next, sofar) =>
-       val s = next.law.getSolution(next.quantityDecl.path).getOrElse{return None}
-       sofar.substitute(next.quantityDecl.path, s)
+    val q: QElement = steps.last.quantityDecl.toQSymbol.asInstanceOf[QElement]
+    val t: QElement = steps.foldRight(q) {case (next: Step, sofar: QElement) =>
+       val s: QElement = next.law.getSolution(next.quantityDecl.path).getOrElse{return None}
+       sofar.substitute(next.quantityDecl.toQSymbol, s)
     }
-    Some(Rule(q.path, t, ruleNumber))
+    Some(Rule(q.asInstanceOf[QSymbol], t, ruleNumber))
   }
 }
 
@@ -291,15 +300,13 @@ case class MPD(parent: DPath, name: LocalName, quantityDecls: List[QuantityDecl]
     laws.foldLeft(Nil: List[Step]){
      (agg, l) => agg ++ l.solvableQuantities(quantityDecls).map(q => Step(l, q))
     }
-  
-  
-  
+    
   def prettyListCycles = cycles.map(_.reverse.steps.map(x=>(x.law.name.toString(), x.quantityDecl.name.toString())))
   
     //List(cycles2(0), cycles2(0).reverse).map(_.steps.map(x=>(x.law.name, x.quantityDecl.name)))
   
 }
-
+/*
 // an assignment of physical quantities to every quantity declaration
 case class MPDState(value: Map[QuantityDecl, Option[ImpreciseFloat]]){
   /** recompute one quantity using one law and the current values of the other quantities */
@@ -336,7 +343,7 @@ case class MPDState(value: Map[QuantityDecl, Option[ImpreciseFloat]]){
   
   def -(rhs: MPDState): Precision = Precision(rhs.value.map(x => (x._1, Some(value(x._1).get - x._2.get ))) )
 }
-
+*/
 abstract class Tactic {
   def check: Boolean
 }
@@ -357,7 +364,7 @@ case class Confluence(path1: BigStep, path2: BigStep) extends Tactic {
 case class Compose(tactics: List[Tactic]) extends Tactic {
   def check: Boolean = tactics.forall(_.check)
 }
-
+/*
 case class Precision(precision: Map[QuantityDecl, Option[ImpreciseFloat]]) {
   def isWithin(that: Precision): Boolean = that.precision.keys.foldLeft(true){(x, y)=>x && precision(y).get <= that.precision(y).get }
   def abs: Precision = Precision(precision.map(x=>(x._1, Some(x._2.get.abs))))
@@ -460,3 +467,4 @@ object RuleToJSON {
   }
 }
 
+*/

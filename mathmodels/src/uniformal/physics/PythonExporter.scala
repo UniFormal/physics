@@ -31,19 +31,26 @@ class PythonExporter extends Exporter {
     out
   }
   
-  def makePythonExpression(qElement: QElement) = qElement match {
-    case QMul(x, y) => s"(${x} * ${y})"
-    case QDiv(x, y) => s"(${x} / ${y})"
-    case QAdd(x, y) => s"(${x} + ${y})"
-    case QSubtract(x, y) => s"(${x} - ${y})"
-    case QNeg(x) => s"(- ${x})"
-    case QExp(x) => s"numpy.exp(${x})"
-    case QLog(x) => s"(numpy.log(${x})"
-    case QGradient(x) => s"(gradient(${x}, self.space))"   
-    case QDivergence(x) => s"(divergence(${x}, self.space))" 
-    case QTensorVal(l, lr) => s"(${makePyTensor(l, lr)})"
-    case QSymbol(x, state) => state + "['" + ensureIdentifierString(x) + "']"
-    case t => throw LocalError("Match Error:" + t)
+  def makePythonExpression(qElement: QElement, state: String): (String, List[QSymbol])= {
+    var params: List[QSymbol] = Nil
+    def f(q: QElement):String = q match {
+      case QMul(x, y) => s"(${f(x)} * ${f(y)})"
+      case QDiv(x, y) => s"(${f(x)} / ${f(y)})"
+      case QAdd(x, y) => s"(${f(x)} + ${f(y)})"
+      case QSubtract(x, y) => s"(${f(x)} - ${f(y)})"
+      case QNeg(x) => s"(- ${f(x)})"
+      case QExp(x) => s"numpy.exp(${f(x)})"
+      case QLog(x) => s"(numpy.log(${f(x)})"
+      case QGradient(x) => s"(gradient(${f(x)}, self.space))"   
+      case QDivergence(x) => s"(divergence(${f(x)}, self.space))" 
+      case QTensorVal(l, lr) => s"(${makePyTensor(l, lr)})"
+      case QSymbol(x, _) => {
+        params ::= q.asInstanceOf[QSymbol]
+        state + "['" + ensureIdentifierString(x) + "']"
+      }
+      case t => throw LocalError("Match Error:" + t)
+    }
+    (f(qElement), params.distinct)
   }
   
   private def makePyTensor(tensorRankList: Term, tensorElementsList: Term): String = {
@@ -75,13 +82,17 @@ class PythonExporter extends Exporter {
   }
   
   
-  private def makeExpressionPyLambda(state: String , qexpr: QuantityStringExpression): String = 
-    s"lambda $state: ${qexpr.expression}"
+  private def makeExpressionPyLambda(state: String , qexpr: QuantityExpression): String = 
+    s"lambda $state: ${makeExpressionPyLambda(state, qexpr.expr)}"
   
   private def makeExpressionPyLambda(state: String, value: Term): String = {
-    val expr = new QuantityStringExpression(makePythonExpression, state, value)
+    val expr = new QuantityExpression(value)
     makeExpressionPyLambda(state, expr)
   }
+  
+  private def makeExpressionPyLambda(state: String, expr: QElement): String =
+        s"lambda $state: ${makePythonExpression(expr, state)}"
+
   
   private def makeGraphPy(mpd: MPD): String = {
     mpd.graph.map(x => {
@@ -96,8 +107,8 @@ class PythonExporter extends Exporter {
     list.mkString("[", " ,", "]")
     
   private def makeConstQuantityExpression(value: Term): String = {
-    val expr = new QuantityStringExpression(makePythonExpression, "", value, true)
-    expr.expression
+    val expr = new QuantityExpression(value, true)
+    makePythonExpression(expr.expr, "")._1
   }
     
   private def quantityDeclsPyAttributes(mpd: MPD) = {
@@ -121,17 +132,19 @@ class PythonExporter extends Exporter {
     
   private def lawsPyAttributes(mpd: MPD) = 
     mpd.laws.map(l => {
-      val lawLhsExpr = new QuantityStringExpression(makePythonExpression, "state", l.formula.lhs)
-      val lawRhsExpr = new QuantityStringExpression(makePythonExpression, "state", l.formula.rhs)
+      val lawLhsExpr = new QuantityExpression(l.formula.lhs)
+      val (lhsStr, lhsParams) = makePythonExpression(lawLhsExpr.expr, "state")
+      val lawRhsExpr = new QuantityExpression(l.formula.rhs)
+      val (rhsStr, rhsParams) = makePythonExpression(lawRhsExpr.expr, "state")
       val out = Map(
           "name" -> s"'${l.name.toString}'",
           "parent" -> s"'${l.parent.toString}'",
-          "used_quantities" -> s"${getStringListPy(lawRhsExpr.parameters ++ lawLhsExpr.parameters)}",
-          "law_test" -> s"lambda state: ((${lawLhsExpr.expression}) - (${lawRhsExpr.expression}))")
+          "used_quantities" -> s"${getStringListPy(((lhsParams ++ rhsParams).map(x=>x.name)).distinct)}",
+          "law_test" -> s"lambda state: ((${rhsStr}) - (${lhsStr}))")
           
       if (l.isComputational)
         out ++ Map("solvables" -> s"${getStringListPy(l.usedQuantities.map(_.name.toString))}") ++
-          l.rules.map(r => (r.solved.name.toString, makeExpressionPyLambda("state", r.solution.value)))
+          l.rules.map(r => (r.solved.name.toString, makeExpressionPyLambda("state", r.solution)))
       else
         out ++ Map("solvables" -> "[]")
     })

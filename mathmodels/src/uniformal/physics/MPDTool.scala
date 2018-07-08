@@ -35,32 +35,23 @@ class MPDTool(controller: Controller) {
          }
          Formula(tp, lhs, rhs)
        }
-       /*case FieldEq(dim, lhs, rhs) =>{
-       val solvedPath = lhs match {
-           case OMS(p) => p
-           case ApplyGeneral(f, x) =>
-             val OMS(p) = f
-             p
-           case _ => throw new GeneralError("LHS of rule should be a constant symbol, not " + lhs.toString)
-         }
-         Formula(dim, lhs, rhs)
-       }*/
        case _ => throw new scala.MatchError("Error")
      }
    }
    
    def toQuantity(value: Term, tp: Term): MQuantity = MQuantity(value, tp)
   
+   def toQElement(value: Term) = (new QuantityExpression(value)).expr
    
    def getRule(formula: Formula, ruleNumber: Int): List[Rule] = {
-         val solvedPath = formula.lhs match {
-           case OMS(p) => p
+         val solvedVar = formula.lhs match {
+           case OMS(p) => QSymbol(p.name.toString, p)
            case ApplyGeneral(f, x) =>
              val OMS(p) = f
-             p
-           case _ => throw new GeneralError("LHS of rule should be a constant symbol")
+             QSymbol(p.name.toString, p)
+           case _ => throw new GeneralError("LHS of rule should be a constant symbol, not: " + formula.lhs.toString)
          }
-         List(Rule(solvedPath, toQuantity(formula.rhs, formula.tp), ruleNumber)) 
+         List(Rule(solvedVar, toQElement(formula.rhs), ruleNumber)) 
    }
    
    def toChain(tp: Term): Chain = {
