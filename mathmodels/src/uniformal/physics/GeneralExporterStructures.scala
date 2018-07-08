@@ -32,19 +32,34 @@ abstract class QElement
   
   def substitute(p: QSymbol, e: QElement) : QElement = {
     this match {
-      case x: QSymbol if x == p => e
-      case x => x
-      // TODO: needs more cases
-      case _ => throw new GeneralError("Undefined construction in subsitution of QElement")
+      case QSymbol(n, h) => if (h == p.path) e else QSymbol(n, h)
+      case QMul(x, y) => QMul(x.substitute(p, e), y.substitute(p, e))
+      case QDiv(x, y) => QDiv(x.substitute(p, e), y.substitute(p, e))
+      case QAdd(x, y) => QAdd(x.substitute(p, e), y.substitute(p, e))
+      case QSubtract(x, y) => QSubtract(x.substitute(p, e), y.substitute(p, e))
+      case QNeg(x) => QNeg(x.substitute(p, e))
+      case QExp(x) => QExp(x.substitute(p, e))
+      case QLog(x) => QLog(x.substitute(p, e))
+      case QDivergence(x) => QDivergence(x.substitute(p, e))
+      case QGradient(x) => QGradient(x.substitute(p, e))
+      case QTensorVal(a, b) => QTensorVal(a, b)
+      case _ => throw new GeneralError("Undefined construction in subsitution of QElement" + this)
+    }
+  }
+  
+  def symbols: List[QSymbol] = {
+    this match {
+      case x: QTwoForm => x.y.symbols ++ x.x.symbols
+      case x: QOneForm => x.x.symbols
+      case QSymbol(_, p) => this.asInstanceOf[QSymbol]::Nil
+      case _ => throw new GeneralError("Undefined construction in search of symbols")
     }
   }
 }
 
-
 trait QTwoForm {
   val x: QElement
   val y: QElement
-  
 }
 
 trait QOneForm {

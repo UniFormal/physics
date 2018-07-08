@@ -23,12 +23,11 @@ class MPDStatsExporter extends Exporter {
        }
        case _ => return
     }
-    
+    var output = ""    
     statsOpt.foreach(f => {
-      println(f)
-
-      utils.File.write(bf.outFile, f.map((t) => s"${t._1} => ${t._2}").mkString(">", "->", ">"))
+      output += f.map((t) => s"${t._1} => ${t._2}").mkString(">", "->", ">") + "\n"
     })
+    utils.File.write(bf.outFile, output)
   }
    
   def exportNamespace(dpath: DPath, bd: BuildTask, namespaces: List[BuildTask], modules: List[BuildTask]) {}

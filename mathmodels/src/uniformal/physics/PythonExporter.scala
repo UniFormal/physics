@@ -40,10 +40,10 @@ class PythonExporter extends Exporter {
       case QSubtract(x, y) => s"(${f(x)} - ${f(y)})"
       case QNeg(x) => s"(- ${f(x)})"
       case QExp(x) => s"numpy.exp(${f(x)})"
-      case QLog(x) => s"(numpy.log(${f(x)})"
-      case QGradient(x) => s"(gradient(${f(x)}, self.space))"   
-      case QDivergence(x) => s"(divergence(${f(x)}, self.space))" 
-      case QTensorVal(l, lr) => s"(${makePyTensor(l, lr)})"
+      case QLog(x) => s"numpy.log(${f(x)})"
+      case QGradient(x) => s"gradient(${f(x)}, self.space)"   
+      case QDivergence(x) => s"divergence(${f(x)}, self.space)" 
+      case QTensorVal(l, lr) => s"${makePyTensor(l, lr)}"
       case QSymbol(x, _) => {
         params ::= q.asInstanceOf[QSymbol]
         state + "['" + ensureIdentifierString(x) + "']"
@@ -91,7 +91,7 @@ class PythonExporter extends Exporter {
   }
   
   private def makeExpressionPyLambda(state: String, expr: QElement): String =
-        s"lambda $state: ${makePythonExpression(expr, state)}"
+        s"lambda $state: ${makePythonExpression(expr, state)._1}"
 
   
   private def makeGraphPy(mpd: MPD): String = {

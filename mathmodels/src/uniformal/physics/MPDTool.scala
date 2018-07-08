@@ -107,7 +107,8 @@ class MPDTool(controller: Controller) {
                
                case Quantity(l, geom, dim, tens) =>
                  val df = c.df.map{t => toQuantity(t, ret)}
-                 Some(QuantityDecl(c.parent, c.name, l, geom, dim, tens, df, false, c.rl == Some("Constant")))
+                 Some(QuantityDecl(c.parent, c.name, l, geom, dim, tens, df, false, 
+                     c.rl != None && c.rl.get.contains("Constant")))
               
                case geometry(p) =>
                  Some(GeometryDecl(c.parent, c.name))

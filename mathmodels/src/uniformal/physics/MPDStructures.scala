@@ -89,7 +89,10 @@ case class MQuantity(value: Term, tp:Term, isField: Boolean = false, isConstant:
   }
 }
 
-case class Formula(tp: Term, lhs: Term, rhs: Term)
+case class Formula(tp: Term, lhs: Term, rhs: Term) {
+  lazy val lhsQuantityExp = new QuantityExpression(lhs)
+  lazy val rhsQuantityExp = new QuantityExpression(rhs)
+}
 
 
 abstract class MPDComponent
@@ -117,10 +120,7 @@ case class Rule(solved: QSymbol, solution: QElement, ruleNumber: Int)
 case class Law(parent: MPath, name: LocalName, formula: Formula, additionalRules: List[Rule], isComputational: Boolean = true) extends MPDComponent with MPDNode{
   def path = parent ? name
 
-  lazy val generatedRules: List[Rule] = {
-    val lhs = new QuantityExpression(formula.lhs)
-    val rhs = new QuantityExpression(formula.rhs)
-    
+  lazy val generatedRules: List[Rule] = {  
     def generateRules(lhs: QElement, rhs: QElement): List[(QElement, QElement)] ={
       lhs match {
         case QAdd(x, y) => generateRules(x, QSubtract(rhs, y)) ++ generateRules(y, QSubtract(rhs, x))
@@ -133,7 +133,7 @@ case class Law(parent: MPath, name: LocalName, formula: Formula, additionalRules
         case _ => (lhs, rhs)::Nil
       }
     }
-    (generateRules(lhs.expr, rhs.expr) ++ generateRules(rhs.expr, lhs.expr))
+    (generateRules(formula.lhsQuantityExp.expr, formula.rhsQuantityExp.expr) ++ generateRules(formula.rhsQuantityExp.expr, formula.lhsQuantityExp.expr))
                  .filter(x => x._1.isInstanceOf[QSymbol] || x._2.isInstanceOf[QSymbol])
                  .map(x => if (x._1.isInstanceOf[QSymbol]) x else (x._2, x._1))
                  .distinct
@@ -142,19 +142,23 @@ case class Law(parent: MPath, name: LocalName, formula: Formula, additionalRules
   
   lazy val rules = (additionalRules ++ generatedRules)
   
-  def usedQuantities = rules.map(_.solved)
+  lazy val usedQuantities: List[QSymbol] = (formula.lhsQuantityExp.expr.symbols ++ formula.rhsQuantityExp.expr.symbols).distinct
   
-  def uses(quantityGlobalName: GlobalName) = usedQuantities contains quantityGlobalName  
-    
-  def getSolution(q: GlobalName): Option[QElement] = rules.find(_.solved == q).map(_.solution)
+  def uses(quantityGlobalName: GlobalName) = usedQuantities.map(_.path) contains quantityGlobalName  
+  
+  def isSolvableFor(quantityGlobalName: GlobalName) = allSolvableQuantities.map(_.path) contains quantityGlobalName
+  
+  def getSolution(q: GlobalName): Option[QElement] = rules.find(_.solved.path == q).map(_.solution)
   
   // a law is functional for a quantity q if it can be expressed in the form q = l(a, b, c, ..) a, b, c, .. != q 
   def isFunctional(q: GlobalName) = getFunctionalRule(q) != None
 
-  def getFunctionalRule(q: GlobalName): Option[Rule] = rules.find(x => (x.solved == q && 
+  def getFunctionalRule(q: GlobalName): Option[Rule] = rules.find(x => (x.solved.path == q && 
                                                !x.solution.contains(QSymbol(q.name.toString, q))))
-                                              
-  def solvableQuantities(qs: List[QuantityDecl]) = qs.filter(rules.map(_.solved) contains _.path)
+                
+  lazy val allSolvableQuantities = rules.map(_.solved)
+  
+  def solvableQuantities(qs: List[QuantityDecl]) = qs.filter(rules.map(_.solved.path) contains _.path)
 }
 
 case class Step(law: Law, quantityDecl: QuantityDecl){
@@ -198,12 +202,12 @@ case class BigStep(steps: List[Step]) {
   }._2
   
   def toRule(ruleNumber: Int): Option[Rule] = {
-    val q: QElement = steps.last.quantityDecl.toQSymbol.asInstanceOf[QElement]
-    val t: QElement = steps.foldRight(q) {case (next: Step, sofar: QElement) =>
+    val q: (QSymbol , QElement) = (steps.head.quantityDecl.toQSymbol, steps.head.law.getSolution(steps.head.quantityDecl.path).getOrElse(return None))
+    val t: (QSymbol, QElement) = steps.tail.foldLeft(q) {case (sofar: (QSymbol, QElement), next: Step) =>
        val s: QElement = next.law.getSolution(next.quantityDecl.path).getOrElse{return None}
-       sofar.substitute(next.quantityDecl.toQSymbol, s)
+       (next.quantityDecl.toQSymbol, s.substitute(sofar._1, sofar._2))
     }
-    Some(Rule(q.asInstanceOf[QSymbol], t, ruleNumber))
+    Some(Rule(t._1, t._2, ruleNumber))
   }
 }
 
@@ -239,14 +243,7 @@ case class Cycle(steps: List[Step]) {
   def reverse: Cycle = {
     if (steps == Nil)
       return this 
-    val newInitialStep = Step(steps.last.law, steps.head.quantityDecl)
-    val reversedStepsPair  = steps.tail.foldRight((newInitialStep::Nil, steps.map(_.law).reverse)) {
-      (y, x) => x match {
-        case (a:List[Step], h::b) => (Step(b.head, y.quantityDecl)::a, b)
-        case _ => throw new scala.MatchError("Match error!")
-      }
-    }
-    Cycle(reversedStepsPair._1.reverse)
+    Cycle(steps.reverse)
   }
   
   private def normalizeRot = {
@@ -256,8 +253,10 @@ case class Cycle(steps: List[Step]) {
   
   def normalize = {
     val c1 = this.normalizeRot
-    val c2 = this.reverse.normalizeRot
-    if (c1.hashCode() > c2.hashCode()) c1 else c2
+    /* I realized cycles are different if they're reversed */ 
+    //val c2 = this.reverse.normalizeRot
+    //if (c1.hashCode() > c2.hashCode()) c1 else c2
+    c1
   }
   
   def toBigStep = BigStep(steps)
@@ -274,16 +273,17 @@ case class MPD(parent: DPath, name: LocalName, quantityDecls: List[QuantityDecl]
   /** all cycles of this MPD */
   lazy val cycles: List[Cycle] = {
     var cycleAgg: List[Cycle] = Nil
-    
     def traverse(hist: List[Step]): Unit = {
       val start = hist.head
-      for {e <- graph if e.law.path != hist.head.law.path}{
-        if (e.law.uses(hist.head.quantityDecl.path)){
+      for {e <- graph if !e.quantityDecl.isConstant && e.law.path != hist.head.law.path && e.law.uses(hist.head.quantityDecl.path)}{
+        if (e.law.isSolvableFor(e.quantityDecl.path)){
           if (! (hist contains e)){ // history doesn't contain entire edge: consider adding to history and recursing
-            if (!(hist.map(_.quantityDecl) contains e.quantityDecl)) // but if q is there, edge is partially in; kill it
-                 traverse(e::hist)
+            if (!(hist.map(_.quantityDecl) contains e.quantityDecl)){ // but if q is there, edge is partially in; kill it
+              traverse(e::hist) 
+            }
+            
           }else if (hist.length > 2 && e == hist.last){
-            cycleAgg ::= Cycle(hist).normalize
+            cycleAgg ::= Cycle(hist).reverse.normalize
           }
         }
       }
@@ -301,7 +301,7 @@ case class MPD(parent: DPath, name: LocalName, quantityDecls: List[QuantityDecl]
      (agg, l) => agg ++ l.solvableQuantities(quantityDecls).map(q => Step(l, q))
     }
     
-  def prettyListCycles = cycles.map(_.reverse.steps.map(x=>(x.law.name.toString(), x.quantityDecl.name.toString())))
+  def prettyListCycles = cycles.map(_.steps.map(x=>(x.law.name.toString(), x.quantityDecl.name.toString())))
   
     //List(cycles2(0), cycles2(0).reverse).map(_.steps.map(x=>(x.law.name, x.quantityDecl.name)))
   
