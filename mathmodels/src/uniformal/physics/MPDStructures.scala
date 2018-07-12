@@ -14,7 +14,7 @@ import Units.BoundaryConditionBase._
 import Units.TacticBase._
 
 @deprecated("use QElement instead", "")
-case class MQuantity(value: Term, tp:Term, isField: Boolean = false, isConstant: Boolean = false) {
+case class MQuantity(value: Term, tp:Term, isUniform: Boolean = false, isConstant: Boolean = false) {
   def times(q: MQuantity) = {
     (tp, q.tp) match {
        case (Quantity(l1, g1, d1, t1), Quantity(l2, g2, d2, t2)) if l1 == l2 && t1 == t2 => 
@@ -98,23 +98,28 @@ case class Formula(tp: Term, lhs: Term, rhs: Term) {
 abstract class MPDComponent
 
 case class QuantitySpaceDecl(parent: MPath, name: LocalName) extends MPDComponent
+{
+  def path = parent?name
+}
 
 case class GeometryDecl(parent: MPath, name: LocalName) extends MPDComponent
 
 case class IntegrationSurfaceDecl(parent: MPath, name: LocalName) extends MPDComponent
 
+case class StepDecl(parent: MPath, name: LocalName, quantityLawPairPaths: List[(GlobalName, GlobalName)]) extends MPDComponent {
+  def path = parent ? name // '?' forms global name
+}
+
 trait MPDNode
 
-case class QuantityDecl(parent: MPath, name: LocalName, l: Term, geom: Term , dim: Term, tens: Term, df: Option[MQuantity], isField: Boolean, isConstant: Boolean) extends MPDComponent with MPDNode {
+case class QuantityDecl(parent: MPath, name: LocalName, l: Term, geom: Term , dim: Term, tens: Term, df: Option[MQuantity], isUniform: Boolean, isConstant: Boolean) extends MPDComponent with MPDNode {
   def path = parent ? name // '?' forms global name
-  def toQuantity = MQuantity(OMS(path), Quantity(l, geom, dim, tens), isField, isConstant)
+  def toQuantity = MQuantity(OMS(path), Quantity(l, geom, dim, tens), isUniform, isConstant)
   def toQSymbol = QSymbol(name.toString, path)
 }
 
-case class Chain(chainLinks: List[GlobalName]) extends MPDComponent
-
 // A rule is an equation solved for a variable
-case class Rule(solved: QSymbol, solution: QElement, ruleNumber: Int)
+case class Rule(solved: QSymbol, solution: QElement, ruleNumber: Option[Int])
 
 // A law is a named container of all rules of an equation/formula
 case class Law(parent: MPath, name: LocalName, formula: Formula, additionalRules: List[Rule], isComputational: Boolean = true) extends MPDComponent with MPDNode{
@@ -137,7 +142,7 @@ case class Law(parent: MPath, name: LocalName, formula: Formula, additionalRules
                  .filter(x => x._1.isInstanceOf[QSymbol] || x._2.isInstanceOf[QSymbol])
                  .map(x => if (x._1.isInstanceOf[QSymbol]) x else (x._2, x._1))
                  .distinct
-                 .map(x => Rule(x._1.asInstanceOf[QSymbol], x._2, 1))             
+                 .map(x => Rule(x._1.asInstanceOf[QSymbol], x._2, None))             
   }
   
   lazy val rules = (additionalRules ++ generatedRules)
@@ -164,16 +169,18 @@ case class Law(parent: MPath, name: LocalName, formula: Formula, additionalRules
 case class Step(law: Law, quantityDecl: QuantityDecl){
   // a step is function if its law is (for its quantity)
   def isFunctional = law.isFunctional(quantityDecl.path)
+  
+  def toRule(ruleNumber: Option[Int]): Option[Rule] = BigStep(List(this), None).toRule(ruleNumber)
 }
 
-case class BigStep(steps: List[Step]) {
+case class BigStep(steps: List[Step], path: Option[GlobalName]){
   def end = steps.last.quantityDecl
   
   def noLawUsedTwice: Boolean = (for {x <- steps; y <- steps if x != y} yield x.law.path != y.law.path).foldRight(true){(x,y) => x && y}
   
   def noQuantityComputedTwice: Boolean = (for {x <- steps; y <- steps if x != y} yield x.quantityDecl.path != y.quantityDecl.path).foldRight(true){(x,y) => x && y}
   
-  def cyclic = !steps.head.law.solvableQuantities(List(steps.last.quantityDecl)).isEmpty
+  def cyclic = steps.head.law.isFunctional(steps.last.quantityDecl.path)
   
   private[this] def subcycleFree = {
     def f(l: List[Step]): Boolean = l match {
@@ -194,14 +201,15 @@ case class BigStep(steps: List[Step]) {
   // a path is functional if every step is
   def isFunctional = steps.map(_.isFunctional).foldRight(true){(x,y) => x && y}
 
-  def isConnected = steps.foldRight((None: Option[QuantityDecl], true)){
-    (x,y) => y._1 match {
-      case Some(w) => (Some(x.quantityDecl), x.law.isFunctional(w.parent?w.name) && y._2)
-      case None => (Some(x.quantityDecl), true)
+  def isConnected = steps.foldLeft((None: Option[QuantityDecl], true)){
+    (y, x) => y._1 match {
+      case Some(w) => (Some(x.quantityDecl), x.law.isFunctional(x.quantityDecl.path) && 
+          x.law.getFunctionalRule(x.quantityDecl.path).get.solution.contains(w.toQSymbol) && y._2)
+      case None => (Some(x.quantityDecl), x.law.isFunctional(x.quantityDecl.path))
     }
   }._2
   
-  def toRule(ruleNumber: Int): Option[Rule] = {
+  def toRule(ruleNumber: Option[Int]): Option[Rule] = {
     val q: (QSymbol , QElement) = (steps.head.quantityDecl.toQSymbol, steps.head.law.getSolution(steps.head.quantityDecl.path).getOrElse(return None))
     val t: (QSymbol, QElement) = steps.tail.foldLeft(q) {case (sofar: (QSymbol, QElement), next: Step) =>
        val s: QElement = next.law.getSolution(next.quantityDecl.path).getOrElse{return None}
@@ -225,7 +233,7 @@ case class Cycle(steps: List[Step]) {
     case _ => false
   }
   
-  def breakAt(q: GlobalName): BigStep = BigStep(rotate(steps, Nil, s => s.quantityDecl.path == q))
+  def breakAt(q: GlobalName): BigStep = BigStep(rotate(steps, Nil, s => s.quantityDecl.path == q), None)
  
   def breakAt(from: GlobalName, to: GlobalName): (BigStep,BigStep) = {
     def splitAt(stepsleft: List[Step], q: GlobalName, r: List[Step]) : (List[Step], List[Step]) = stepsleft match {
@@ -234,7 +242,7 @@ case class Cycle(steps: List[Step]) {
       case Nil => (stepsleft, r)
     }
     breakAt(from) match {
-      case BigStep(stps) => {val splt = splitAt(stps, to, Nil); (BigStep(splt._1), BigStep(splt._2))}
+      case BigStep(stps, p) => {val splt = splitAt(stps, to, Nil); (BigStep(splt._1, p), BigStep(splt._2, p))}
       case _ => throw new scala.MatchError("Match error!")
     }
   }
@@ -259,11 +267,11 @@ case class Cycle(steps: List[Step]) {
     c1
   }
   
-  def toBigStep = BigStep(steps)
+  def toBigStep = BigStep(steps, None)
 }
 
 // MPDs
-case class MPD(parent: DPath, name: LocalName, quantityDecls: List[QuantityDecl], laws: List[Law], integrationSurfaces: List[IntegrationSurfaceDecl], spaces: List[QuantitySpaceDecl]) {
+case class MPD(parent: DPath, name: LocalName, quantityDecls: List[QuantityDecl], laws: List[Law], computationSteps: List[BigStep], integrationSurfaces: List[IntegrationSurfaceDecl], spaces: List[QuantitySpaceDecl]) {
   def path = parent ? name
   
   def quantitiesInLaw(l: Law) = quantityDecls.map(_.path) intersect l.usedQuantities

@@ -120,7 +120,7 @@ class PythonExporter extends Exporter {
             case OMS(p) => s"'${p.name.toString}'"
             case _ => "''"
           }),
-          "is_field" -> {if (q.isField) "True" else "False"} ,
+          "is_uniform" -> {if (q.isUniform) "True" else "False"} ,
           "is_constant" -> {if (q.isConstant) "True" else "False"}
       )
       if (q.df != None)
@@ -147,6 +147,32 @@ class PythonExporter extends Exporter {
           l.rules.map(r => (r.solved.name.toString, makeExpressionPyLambda("state", r.solution)))
       else
         out ++ Map("solvables" -> "[]")
+    })
+    
+  private def computationStepsPyAttributes(mpd: MPD) = 
+    mpd.computationSteps.map(bstp => {
+      val substepsLambdas = bstp.steps.map(stp => {
+          val (stpStr, params) = makePythonExpression(stp.toRule(None).get.solution, "state")
+          s"lambda state: (${stpStr})"
+        }
+      ).mkString("[", ",", "]")
+      val lawQuantityNamePairs = bstp.steps.map(stp => 
+        s"('${stp.law.name.toString}', '${stp.quantityDecl.name.toString}')"
+      ).mkString("[", ",", "]")
+      val stpExpression = bstp.toRule(None).get.solution
+      val (stpStr, params) = makePythonExpression(stpExpression, "state")
+      val parent = bstp.path.get.toPath
+      val name = bstp.path.get.last
+      Map(
+          "name" -> s"'${name.toString}'",
+          "parent" -> s"'${parent.toString}'",
+          "used_quantities" -> s"${getStringListPy(((params).map(x=>x.name)).distinct)}",
+          "compute" -> s"lambda state: (${stpStr})",
+          "number_of_substeps" -> s"${bstp.steps.size}",
+          "substeps" -> substepsLambdas,
+          "law_quantity_pairs" -> lawQuantityNamePairs,
+          "is_cyclic" -> {if (bstp.cyclic) "True" else "False"},
+          "is_connected" -> {if (bstp.isConnected) "True" else "False"})
     })
   
   def pyObjectAssignment(lhs: String, objname: String, attrs: Map[String, String], currentIndentLevel: Int): String = {
@@ -179,6 +205,10 @@ ${pyIndent(2)}${lawsPyAttributes(mpd).map{
   mp => pyObjectAssignment(s"self.laws[${mp("name")}]", "Law", mp, 2)}.mkString("\n\n"+pyIndent(2))
 }
 
+${pyIndent(1)}def init_computation_steps(self):
+${pyIndent(2)}${computationStepsPyAttributes(mpd).map{
+  mp => pyObjectAssignment(s"self.computation_steps[${mp("name")}]", "ComputationStep", mp, 2)}.mkString("\n\n"+pyIndent(2))
+}
 
 """
 

@@ -19,7 +19,7 @@ import Units.TacticBase._
 import Units.BoundaryConditionBase._
 
 
-class MPDTool(controller: Controller) {    
+class MPDTool(controller: Controller) {
   val ruleRegex = """^([\p{L}_]+)?(_rule(\d+))?$""".r
   
   def toFormula(t: Term): Formula = {
@@ -43,7 +43,7 @@ class MPDTool(controller: Controller) {
   
    def toQElement(value: Term) = (new QuantityExpression(value)).expr
    
-   def getRule(formula: Formula, ruleNumber: Int): List[Rule] = {
+   def getRule(formula: Formula, ruleNumber: Option[Int]): List[Rule] = {
          val solvedVar = formula.lhs match {
            case OMS(p) => QSymbol(p.name.toString, p)
            case ApplyGeneral(f, x) =>
@@ -54,20 +54,16 @@ class MPDTool(controller: Controller) {
          List(Rule(solvedVar, toQElement(formula.rhs), ruleNumber)) 
    }
    
-   def toChain(tp: Term): Chain = {
-     def getChainList(t: Term): List[GlobalName] =
+   def toStepDecl(parent: MPath, name: LocalName, tp: Term): StepDecl = {
+     def getStepPairList(t: Term): List[(GlobalName, GlobalName)] =
      t match {
-       case ChainAggregate(agg, OMS(lawpath)) => {
-         val ChainAggregate(hmm2, hmm) = t 
-         lawpath::getChainList(agg)
-       
-       }
-       case MakeChain(OMS(law1path), OMS(law2path)) => law2path::law1path::Nil
+       case StepAggregate(agg, MakeStep(OMS(quantityPath), OMS(lawPath))) => (quantityPath, lawPath)::getStepPairList(agg)
+       case MakeStep(OMS(quantityPath), OMS(lawPath)) => (quantityPath, lawPath)::Nil
        case _ => {
-         throw new GeneralError("Unidentified component in chain: " + t.toString)
+         throw new GeneralError("Unidentified component in step: " + t.toString)
        }
      }
-     Chain(getChainList(tp))
+     StepDecl(parent, name, getStepPairList(tp))
    }
    
    def toEqualityLaw(parent: MPath, name: LocalName, lhs: Term, rhs: Term, dim: Term, dom: Term, rl: Option[String]) : Law = {
@@ -83,13 +79,13 @@ class MPDTool(controller: Controller) {
      Law(parent, LocalName.parse(lawName), formula, getRule(formula, ruleNumber), rl != Some("Condition"))
    }
    
-   def getRuleNameData(name: String): (String, Int) = {
+   def getRuleNameData(name: String): (String, Option[Int]) = {
      ruleRegex.findAllIn(name).matchData.map({
        m: Regex.Match => {
          val baseName = m.group(1)
          val ruleNumber = m.group(3) match {
-           case null => 0
-           case a: String => a.toInt 
+           case null => None
+           case a: String => Some(a.toInt) 
          }
          (baseName, ruleNumber)
        }
@@ -107,7 +103,8 @@ class MPDTool(controller: Controller) {
                
                case Quantity(l, geom, dim, tens) =>
                  val df = c.df.map{t => toQuantity(t, ret)}
-                 Some(QuantityDecl(c.parent, c.name, l, geom, dim, tens, df, false, 
+                 Some(QuantityDecl(c.parent, c.name, l, geom, dim, tens, df, 
+                     c.rl != None && c.rl.get.contains("Uniform"), 
                      c.rl != None && c.rl.get.contains("Constant")))
               
                case geometry(p) =>
@@ -126,7 +123,7 @@ class MPDTool(controller: Controller) {
                  None
                  
                case GetStepType(a) =>
-                 Some(toChain(a))
+                 Some(toStepDecl(c.parent, c.name, a))
                  
                case d =>
                  throw new GeneralError("Unknown construction of MPD component: " + c.name.toString + "..." +   d.toString())
@@ -169,7 +166,7 @@ class MPDTool(controller: Controller) {
      var integrationSurfaces: List[IntegrationSurfaceDecl] = Nil
      var spaces: List[QuantitySpaceDecl] = Nil
      var geometryDecls: List[GeometryDecl] = Nil
-     var functionalChains: List[BigStep] = Nil
+     var computationSteps: List[BigStep] = Nil
      
      comps foreach { 
        comp => comp match {
@@ -185,22 +182,28 @@ class MPDTool(controller: Controller) {
              laws ::= newLaw
            }
          }
-         case chain if chain.isInstanceOf[Chain] => {
-           val newChain = chain.asInstanceOf[Chain]
-           val bigStep = BigStep(newChain.chainLinks.map(l => {
-             val (lawName, ruleNumber) = getRuleNameData(l.name.toString)
-             val lawIndex = laws.indexWhere{l => l.name.toString() == lawName}
-             if (lawIndex == -1)
-               throw new GeneralError("Can not find law in chain: " + l.name.toString)
-           
-             val quantityIndex = quantityDecls.indexWhere{q => (q.parent?q.name).toString == laws(lawIndex).rules(ruleNumber).solved.toString}
-             if (quantityIndex == -1)
-               throw new GeneralError("Can not find quantity in the rule is solved for. It appears the law is not functional: " + l.name.toString)
-             
-             Step(laws(lawIndex), quantityDecls(quantityIndex))
-           }))
-           println("Hodge: " + bigStep.isConnected)
+         case stepDecl if stepDecl.isInstanceOf[StepDecl] => {
+           val newStepDecl = stepDecl.asInstanceOf[StepDecl]
+           val bigStep = BigStep(newStepDecl.quantityLawPairPaths.map(t => 
+             t match{     
+               case (qP, lP) =>
+               {
+                   val quantityDecl = quantityDecls.find(p => p.path == qP)
+                   val law = laws.find(l => l.path == lP)
+                   if (quantityDecl == None) 
+                     throw new GeneralError("Can't find quantity decl for step: " + qP.toString)
+                   if (law == None) 
+                     throw new GeneralError("Can't find law for step: " + lP.toString)
+                   Step(law.get, quantityDecl.get)
+               }
+             }
+           ), Some(newStepDecl.path))
+           if (!bigStep.isConnected)
+             throw new GeneralError("Computation step is not connected: " + newStepDecl.path.toString)
+           computationSteps ::= bigStep
+           println("Hodge: " + bigStep.isConnected, bigStep.steps.map(x => (x.law.name, x.quantityDecl.name)))
          }
+         
          case geom if geom.isInstanceOf[GeometryDecl] => geometryDecls ::= geom.asInstanceOf[GeometryDecl]
          case surface if surface.isInstanceOf[IntegrationSurfaceDecl] =>
            integrationSurfaces ::= surface.asInstanceOf[IntegrationSurfaceDecl]
@@ -212,6 +215,6 @@ class MPDTool(controller: Controller) {
          case _ => throw new scala.MatchError("Error")
        }
      }
-     Some(MPD(thy.parent, thy.name, quantityDecls, laws, integrationSurfaces, spaces))
+     Some(MPD(thy.parent, thy.name, quantityDecls, laws, computationSteps, integrationSurfaces, spaces))
    }
 }

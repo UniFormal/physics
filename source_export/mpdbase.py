@@ -18,14 +18,17 @@ class MPDBase(object):
                         lambda x: self.quantity_decls[x].is_constant,
                         self.quantity_decls.keys())
 		self.field_quantity_decls_keys = filter(
-                        lambda x: self.quantity_decls[x].is_field,
+                        lambda x: not self.quantity_decls[x].is_uniform,
                         self.quantity_decls.keys())
 		self.uniform_quantity_decls_keys = filter(
-                        lambda x: not self.quantity_decls[x].is_field,
+                        lambda x: self.quantity_decls[x].is_uniform,
                         self.quantity_decls.keys())
 
 		self.laws = {}
 		self.init_laws()
+
+		self.computation_steps = {}
+		self.init_computation_steps()
 
 		self.graph = []
 
@@ -35,6 +38,9 @@ class MPDBase(object):
 		pass
 
 	def init_quantity_decls(self):
+		pass
+
+	def init_computation_steps(self):
 		pass
 
 	def __getitem__(self, law_key):
@@ -79,6 +85,31 @@ class MPDBase(object):
                 # we cast to set to remove repeating elements
                 self.cycles = list(set(self.cycles))
 
+class ComputationStep(self, name, parent):
+	def def __init__(self, **kwargs):
+		self.name = kwargs["name"]
+		self.parent = kwargs["parent"]
+		self.used_quantity_names = kwargs["used_quantities"]
+		self.law_quantity_name_pairs = kwargs["law_quantity_pairs"]
+		self.compute_lambda = kwargs["compute"]
+		self.substeps_lambdas = kwargs["substeps"]
+		self.number_of_substeps = kwargs["number_of_substeps"]
+		self.is_connected = kwargs["is_connected"]
+		self.is_cyclic = kwargs["is_cyclic"]
+
+	def __str__(self):
+		s = "name: " + self.name + '\n'
+		s += "parent: " + self.parent + '\n'
+		s += "computes quantity: " + self.quantityDecl.name
+		s += "from law: " + self.law.name 
+		return s
+
+	def compute(self, state)
+		return self.compute_lambda(state)
+
+	def compute_and_update(self, state):
+		state[quantityDecl.name] = self.compute_lambda(state)
+
 class Declaration:
 	def __init__(self, name, parent):
 		self.name = name
@@ -92,9 +123,9 @@ class Declaration:
 class QuantityDecl(Declaration):
 	def __init__(self, **kwargs):
 		Declaration.__init__(self, kwargs["name"], kwargs["parent"])
-		self.init_value = 0.0
+		self.initial_value = kwargs["initial_value"] or 0.0
 		self.dimension = kwargs["dimension"]
-		self.is_field = kwargs["is_field"]
+		self.is_uniform = kwargs["is_uniform"]
 		self.is_constant = kwargs["is_constant"]
 
 	def __str__(self):
@@ -152,7 +183,7 @@ class MPDState:
 		self.__dict__['mpd'] = mpd
                 self.__dict__['state_values'] = {}
                 for n in mpd.quantity_decls:
-                        self.state_values[n] = None
+                        self.state_values[n] = n.initial_value
                 
 	def update(self):
 		for q in self.mpd.quantity_decls:

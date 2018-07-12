@@ -20,9 +20,9 @@ import Units.TacticBase._
 abstract class QElement
 {
   def contains(e: QElement) : Boolean = {
-    e match {
+    this match {
       case x if x == e => true
-      case x: QTwoForm => x.y.contains(e) && x.x.contains(e)
+      case x: QTwoForm => x.y.contains(e) || x.x.contains(e)
       case x: QOneForm => x.x.contains(e)
       case QSymbol(_, p) => false
       case QTensorVal(_, _) => false
