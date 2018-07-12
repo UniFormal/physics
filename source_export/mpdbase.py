@@ -85,8 +85,8 @@ class MPDBase(object):
                 # we cast to set to remove repeating elements
                 self.cycles = list(set(self.cycles))
 
-class ComputationStep(self, name, parent):
-	def def __init__(self, **kwargs):
+class ComputationStep:
+	def __init__(self, **kwargs):
 		self.name = kwargs["name"]
 		self.parent = kwargs["parent"]
 		self.used_quantity_names = kwargs["used_quantities"]
@@ -104,7 +104,7 @@ class ComputationStep(self, name, parent):
 		s += "from law: " + self.law.name 
 		return s
 
-	def compute(self, state)
+	def compute(self, state):
 		return self.compute_lambda(state)
 
 	def compute_and_update(self, state):
@@ -235,6 +235,14 @@ class TacticBase:
                 pass
 
 def derivative_on_space(image, dom):
-	deriv = numpy.diff(image)/numpy.diff(dom)
-	return numpy.append(deriv, deriv[-1])
+        deriv = numpy.diff(image)/numpy.diff(dom)
+        return numpy.append(deriv, deriv[-1])
 
+def gradient(scalar_field, dom_grids):
+        ds = numpy.diff(dom_grids[-1])[0][0]
+        print(ds)
+        return numpy.gradient(scalar_field, ds)
+
+def divergence(vector_field, dom_grids):
+        ds = numpy.diff(dom_grids[-1])[0][0]
+        return np.sum(np.gradient(vector_field, ds),axis=0)

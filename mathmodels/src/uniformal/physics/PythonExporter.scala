@@ -10,6 +10,7 @@ import objects._
  
 import info.mathhub.lf.MitM.Foundation._
 import info.mathhub.lf.MitM.Foundation.Tensors._
+import info.mathhub.lf.MitM.Foundation.RealLiterals._
 
 
 class PythonExporter extends Exporter {
@@ -72,7 +73,7 @@ class PythonExporter extends Exporter {
     def get_list_recursive(t: Term, tail: List[String]) : List[String] = {
       t match {
         case tcons(a, x, b) => {
-          get_list_recursive(b, (x.toString)::tail)
+          get_list_recursive(b, (makeRealStringFromRealTerm(x))::tail)
         }
         case rnil(p) => return tail
         case nnil(p) => return tail
@@ -81,6 +82,19 @@ class PythonExporter extends Exporter {
     get_list_recursive(l, Nil)
   }
   
+  private def makeRealStringFromRealTerm(r:Term): String = {
+    r match {
+      case real_underscore_times_underscore_tenth_underscore_pow(a, b) => 
+        (makeRealStringFromRealTerm(a).toDouble * scala.math.pow(10.0,
+                       makeRealStringFromRealTerm(b).toDouble)).toString
+      case times_underscore_real_underscore_lit(a, b) =>
+        (makeRealStringFromRealTerm(a).toDouble *
+         makeRealStringFromRealTerm(b).toDouble).toString
+      case minus_underscore_real_underscore_lit(a) =>
+        (- makeRealStringFromRealTerm(a).toDouble).toString
+      case a => a.toString
+    }
+  }
   
   private def makeExpressionPyLambda(state: String , qexpr: QuantityExpression): String = 
     s"lambda $state: ${makeExpressionPyLambda(state, qexpr.expr)}"
