@@ -18,6 +18,9 @@ import Units.GeometryBase._
 import Units.TacticBase._
 import Units.BoundaryConditionBase._
 
+import info.mathhub.lf.MitM.Foundation.RealLiterals._
+import info.mathhub.lf.MitM.Foundation.NatLiterals._
+import info.mathhub.lf.MitM.Foundation.Tensors._
 
 class MPDTool(controller: Controller) {
   val ruleRegex = """^([\p{L}_]+)?(_rule(\d+))?$""".r
@@ -92,6 +95,33 @@ class MPDTool(controller: Controller) {
      }).toList(0)
    }
    
+   private def makeListFromListTerm(l: Term): List[String] = {
+    def get_list_recursive(t: Term, tail: List[String]) : List[String] = {
+      t match {
+        case tcons(a, x, b) => {
+          a match {
+            case nat_underscore_lit(e) => get_list_recursive(b, (x.toString)::tail)
+          }
+        }
+        case rnil(p) => return tail
+        case nnil(p) => return tail
+      }
+    }
+    get_list_recursive(l, Nil)
+  }
+   
+   private def getTensorRankShape(tensorType: Term) : List[Int] = {
+     tensorType match {
+       case tensor_underscore_type(l) => {
+         makeListFromListTerm(l).map(n => n.toInt)
+       }
+       case Tensors.scalar(l) => List()
+       case Tensors.vector(i) => List(i.toString.toInt)
+       case Tensors.matrix(j,k) => List(j.toString.toInt, k.toString.toInt)
+       case _ => throw new GeneralError("Can't recognize tensor type: " + tensorType.toString)
+     }
+   }
+   
    def toMPDComponent(c: Constant): Option[MPDComponent] = {
          c.tp match {
            case None =>
@@ -103,7 +133,7 @@ class MPDTool(controller: Controller) {
                
                case Quantity(l, geom, dim, tens) =>
                  val df = c.df.map{t => toQuantity(t, ret)}
-                 Some(QuantityDecl(c.parent, c.name, l, geom, dim, tens, df, 
+                 Some(QuantityDecl(c.parent, c.name, l, geom, dim, getTensorRankShape(tens), df, 
                      c.rl != None && c.rl.get.contains("Uniform"), 
                      c.rl != None && c.rl.get.contains("Constant")))
               

@@ -11,6 +11,7 @@ import objects._
 import info.mathhub.lf.MitM.Foundation._
 import info.mathhub.lf.MitM.Foundation.Tensors._
 import info.mathhub.lf.MitM.Foundation.RealLiterals._
+import info.mathhub.lf.MitM.Foundation.NatLiterals._
 
 
 class PythonExporter extends Exporter {
@@ -73,7 +74,10 @@ class PythonExporter extends Exporter {
     def get_list_recursive(t: Term, tail: List[String]) : List[String] = {
       t match {
         case tcons(a, x, b) => {
-          get_list_recursive(b, (makeRealStringFromRealTerm(x))::tail)
+          a match {
+            case real_underscore_lit(e) => get_list_recursive(b, (makeRealStringFromRealTerm(x))::tail)
+            case nat_underscore_lit(e) => get_list_recursive(b, (x.toString)::tail)
+          }
         }
         case rnil(p) => return tail
         case nnil(p) => return tail
@@ -108,9 +112,15 @@ class PythonExporter extends Exporter {
         s"lambda $state: ${makePythonExpression(expr, state)._1}"
 
   
+  private def makeFunctionalGraphPy(mpd: MPD): String = {
+    mpd.step_graph.map(x => {
+      (s"('${x.quantityDecl.name.toString}', '${x.law.name.toString}')")
+    }).mkString("[", ", ", "]")
+  }
+  
   private def makeGraphPy(mpd: MPD): String = {
     mpd.graph.map(x => {
-      (s"('${x.quantityDecl.name.toString}', '${x.law.name.toString}')")
+      (s"('${x._2.name.toString}', '${x._1.name.toString}')")
     }).mkString("[", ", ", "]")
   }
   
@@ -135,7 +145,8 @@ class PythonExporter extends Exporter {
             case _ => "''"
           }),
           "is_uniform" -> {if (q.isUniform) "True" else "False"} ,
-          "is_constant" -> {if (q.isConstant) "True" else "False"}
+          "is_constant" -> {if (q.isConstant) "True" else "False"},
+          "tensor_shape" -> s"[${q.tensRank.mkString(",")}]"
       )
       if (q.df != None)
         (parameters:+("initial_value" -> makeConstQuantityExpression(q.df.get.value))).toMap
@@ -207,6 +218,7 @@ ${pyIndent(3)}'${mpd.name.toString}',
 ${pyIndent(3)}'${mpd.parent.toString}',
 ${pyIndent(3)}space,
 ${pyIndent(3)}integration_surfaces)
+${pyIndent(2)}self.functional_graph = ${makeFunctionalGraphPy(mpd)}
 ${pyIndent(2)}self.graph = ${makeGraphPy(mpd)}
 
 ${pyIndent(1)}def init_quantity_decls(self):
@@ -240,7 +252,7 @@ ${pyIndent(2)}${computationStepsPyAttributes(mpd).map{
     
     pyOpt.foreach(py => {
       println(py)
-
+      println(bf.outFile.name)
       val header = "#!/usr/bin/env python\n\n# "+thy.path.toString()+"\n\n"
       utils.File.write(bf.outFile, header+py)
     })

@@ -112,9 +112,9 @@ case class StepDecl(parent: MPath, name: LocalName, quantityLawPairPaths: List[(
 
 trait MPDNode
 
-case class QuantityDecl(parent: MPath, name: LocalName, l: Term, geom: Term , dim: Term, tens: Term, df: Option[MQuantity], isUniform: Boolean, isConstant: Boolean) extends MPDComponent with MPDNode {
+case class QuantityDecl(parent: MPath, name: LocalName, l: Term, geom: Term , dim: Term, tensRank: List[Int], df: Option[MQuantity], isUniform: Boolean, isConstant: Boolean) extends MPDComponent with MPDNode {
   def path = parent ? name // '?' forms global name
-  def toQuantity = MQuantity(OMS(path), Quantity(l, geom, dim, tens), isUniform, isConstant)
+  //def toQuantity = MQuantity(OMS(path), Quantity(l, geom, dim, tens), isUniform, isConstant)
   def toQSymbol = QSymbol(name.toString, path)
 }
 
@@ -283,7 +283,7 @@ case class MPD(parent: DPath, name: LocalName, quantityDecls: List[QuantityDecl]
     var cycleAgg: List[Cycle] = Nil
     def traverse(hist: List[Step]): Unit = {
       val start = hist.head
-      for {e <- graph if !e.quantityDecl.isConstant && e.law.path != hist.head.law.path && e.law.uses(hist.head.quantityDecl.path)}{
+      for {e <- step_graph if !e.quantityDecl.isConstant && e.law.path != hist.head.law.path && e.law.uses(hist.head.quantityDecl.path)}{
         if (e.law.isSolvableFor(e.quantityDecl.path)){
           if (! (hist contains e)){ // history doesn't contain entire edge: consider adding to history and recursing
             if (!(hist.map(_.quantityDecl) contains e.quantityDecl)){ // but if q is there, edge is partially in; kill it
@@ -297,18 +297,23 @@ case class MPD(parent: DPath, name: LocalName, quantityDecls: List[QuantityDecl]
       }
     }
     
-    for {e <- graph}{
+    for {e <- step_graph}{
       traverse(e::Nil)
     }
     
     cycleAgg.distinct
   }
   
-  lazy val graph: List[Step] =
+  lazy val step_graph: List[Step] =
     laws.foldLeft(Nil: List[Step]){
      (agg, l) => agg ++ l.solvableQuantities(quantityDecls).map(q => Step(l, q))
     }
     
+  lazy val graph: List[(GlobalName, GlobalName)] = 
+    laws.foldLeft(Nil: List[(GlobalName, GlobalName)]){
+     (agg, l) => agg ++ l.usedQuantities.map(q => (l.path, q.path))
+    }
+  
   def prettyListCycles = cycles.map(_.steps.map(x=>(x.law.name.toString(), x.quantityDecl.name.toString())))
   
     //List(cycles2(0), cycles2(0).reverse).map(_.steps.map(x=>(x.law.name, x.quantityDecl.name)))

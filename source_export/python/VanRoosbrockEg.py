@@ -12,39 +12,48 @@ class MPD_VanRoosbrockEg(MPDBase):
 			'http://mathhub.info/MitM/Modelss',
 			space,
 			integration_surfaces)
-		self.graph = [('electron_mobility', 'electron_current'), ('electron_density', 'electron_current'), ('current_density', 'electron_current'), ('elementary_charge', 'electron_current'), ('electron_density', 'electron_density_law'), ('quasifermi_potential', 'electron_density_law'), ('electrostatic_potential', 'electron_density_law'), ('band_energy', 'electron_density_law'), ('band_density', 'electron_density_law'), ('temperature', 'electron_density_law'), ('boltzmann_constant', 'electron_density_law'), ('elementary_charge', 'electron_density_law'), ('electric_field', 'electric_field_law'), ('displacement', 'displacement_relation'), ('electric_field', 'displacement_relation'), ('absolute_permittivity', 'displacement_relation'), ('doping_profile', 'charge_density_law'), ('electron_density', 'charge_density_law'), ('charge_density', 'charge_density_law'), ('elementary_charge', 'charge_density_law'), ('charge_density', 'gauss_law'), ('absolute_permittivity', 'permitivity_law'), ('relative_permittivity', 'permitivity_law'), ('electric_constant', 'permitivity_law')]
+		self.functional_graph = [('electron_mobility', 'electron_current'), ('electron_density', 'electron_current'), ('current_density', 'electron_current'), ('elementary_charge', 'electron_current'), ('electron_density', 'electron_density_law'), ('quasifermi_potential', 'electron_density_law'), ('electrostatic_potential', 'electron_density_law'), ('band_energy', 'electron_density_law'), ('band_density', 'electron_density_law'), ('temperature', 'electron_density_law'), ('boltzmann_constant', 'electron_density_law'), ('elementary_charge', 'electron_density_law'), ('electric_field', 'electric_field_law'), ('displacement', 'displacement_relation'), ('electric_field', 'displacement_relation'), ('absolute_permittivity', 'displacement_relation'), ('doping_profile', 'charge_density_law'), ('electron_density', 'charge_density_law'), ('charge_density', 'charge_density_law'), ('elementary_charge', 'charge_density_law'), ('charge_density', 'gauss_law'), ('absolute_permittivity', 'permitivity_law'), ('relative_permittivity', 'permitivity_law'), ('electric_constant', 'permitivity_law')]
+		self.graph = [('current_density', 'electron_continuity_eqn'), ('current_density', 'electron_current'), ('quasifermi_potential', 'electron_current'), ('electron_density', 'electron_current'), ('electron_mobility', 'electron_current'), ('elementary_charge', 'electron_current'), ('electron_density', 'electron_density_law'), ('temperature', 'electron_density_law'), ('boltzmann_constant', 'electron_density_law'), ('band_energy', 'electron_density_law'), ('quasifermi_potential', 'electron_density_law'), ('electrostatic_potential', 'electron_density_law'), ('elementary_charge', 'electron_density_law'), ('band_density', 'electron_density_law'), ('electric_field', 'electric_field_law'), ('electrostatic_potential', 'electric_field_law'), ('displacement', 'displacement_relation'), ('electric_field', 'displacement_relation'), ('absolute_permittivity', 'displacement_relation'), ('charge_density', 'charge_density_law'), ('electron_density', 'charge_density_law'), ('doping_profile', 'charge_density_law'), ('elementary_charge', 'charge_density_law'), ('charge_density', 'gauss_law'), ('displacement', 'gauss_law'), ('absolute_permittivity', 'permitivity_law'), ('relative_permittivity', 'permitivity_law'), ('electric_constant', 'permitivity_law')]
 
 	def init_quantity_decls(self):
 		self.quantity_decls['electron_mobility'] = QuantityDecl(
 			parent = 'http://mathhub.info/MitM/Modelss?Quantities',
 			name = 'electron_mobility',
 			is_uniform = False,
+			initial_value = numpy.array(1.0E-4),
 			is_constant = False,
-			dimension = '' 
+			dimension = '',
+			tensor_shape = [] 
 		)
 
 		self.quantity_decls['doping_profile'] = QuantityDecl(
 			parent = 'http://mathhub.info/MitM/Modelss?Quantities',
 			name = 'doping_profile',
 			is_uniform = False,
+			initial_value = numpy.array(1.0E-21),
 			is_constant = False,
-			dimension = 'VolumeDensity' 
+			dimension = 'VolumeDensity',
+			tensor_shape = [] 
 		)
 
 		self.quantity_decls['electron_density'] = QuantityDecl(
 			parent = 'http://mathhub.info/MitM/Modelss?Quantities',
 			name = 'electron_density',
 			is_uniform = False,
+			initial_value = numpy.array(-1.0E-21),
 			is_constant = False,
-			dimension = 'VolumeDensity' 
+			dimension = 'VolumeDensity',
+			tensor_shape = [] 
 		)
 
 		self.quantity_decls['charge_density'] = QuantityDecl(
 			parent = 'http://mathhub.info/MitM/Modelss?Quantities',
 			name = 'charge_density',
 			is_uniform = False,
+			initial_value = numpy.array(-2.0),
 			is_constant = False,
-			dimension = '' 
+			dimension = '',
+			tensor_shape = [] 
 		)
 
 		self.quantity_decls['displacement'] = QuantityDecl(
@@ -52,15 +61,18 @@ class MPD_VanRoosbrockEg(MPDBase):
 			name = 'displacement',
 			is_uniform = False,
 			is_constant = False,
-			dimension = '' 
+			dimension = '',
+			tensor_shape = [3] 
 		)
 
 		self.quantity_decls['quasifermi_potential'] = QuantityDecl(
 			parent = 'http://mathhub.info/MitM/Modelss?Quantities',
 			name = 'quasifermi_potential',
 			is_uniform = False,
+			initial_value = numpy.array(-4.0999999999999994E-19),
 			is_constant = False,
-			dimension = 'ElectricPotential' 
+			dimension = 'ElectricPotential',
+			tensor_shape = [] 
 		)
 
 		self.quantity_decls['electrostatic_potential'] = QuantityDecl(
@@ -68,7 +80,8 @@ class MPD_VanRoosbrockEg(MPDBase):
 			name = 'electrostatic_potential',
 			is_uniform = False,
 			is_constant = False,
-			dimension = 'ElectricPotential' 
+			dimension = 'ElectricPotential',
+			tensor_shape = [] 
 		)
 
 		self.quantity_decls['electric_field'] = QuantityDecl(
@@ -76,7 +89,8 @@ class MPD_VanRoosbrockEg(MPDBase):
 			name = 'electric_field',
 			is_uniform = False,
 			is_constant = False,
-			dimension = 'ElectricField' 
+			dimension = 'ElectricField',
+			tensor_shape = [3] 
 		)
 
 		self.quantity_decls['current_density'] = QuantityDecl(
@@ -84,71 +98,28 @@ class MPD_VanRoosbrockEg(MPDBase):
 			name = 'current_density',
 			is_uniform = False,
 			is_constant = False,
-			dimension = 'ElectricCurrentDensity' 
+			dimension = 'ElectricCurrentDensity',
+			tensor_shape = [3] 
 		)
 
 		self.quantity_decls['absolute_permittivity'] = QuantityDecl(
 			parent = 'http://mathhub.info/MitM/Modelss?Quantities',
 			name = 'absolute_permittivity',
 			is_uniform = True,
+			initial_value = numpy.array(8.85418782E-12),
 			is_constant = False,
-			dimension = 'ElectricalPermittivity' 
+			dimension = 'ElectricalPermittivity',
+			tensor_shape = [] 
 		)
 
 		self.quantity_decls['relative_permittivity'] = QuantityDecl(
 			parent = 'http://mathhub.info/MitM/Modelss?Quantities',
 			name = 'relative_permittivity',
 			is_uniform = True,
+			initial_value = numpy.array(1.0),
 			is_constant = False,
-			dimension = 'DimNone' 
-		)
-
-		self.quantity_decls['band_energy'] = QuantityDecl(
-			parent = 'http://mathhub.info/MitM/Modelss?Quantities',
-			name = 'band_energy',
-			is_uniform = False,
-			is_constant = True,
-			dimension = 'Energy' 
-		)
-
-		self.quantity_decls['band_density'] = QuantityDecl(
-			parent = 'http://mathhub.info/MitM/Modelss?Quantities',
-			name = 'band_density',
-			is_uniform = False,
-			is_constant = True,
-			dimension = 'VolumeDensity' 
-		)
-
-		self.quantity_decls['temperature'] = QuantityDecl(
-			parent = 'http://mathhub.info/MitM/Modelss?Quantities',
-			name = 'temperature',
-			is_uniform = True,
-			is_constant = True,
-			dimension = 'Temperature' 
-		)
-
-		self.quantity_decls['boltzmann_constant'] = QuantityDecl(
-			parent = 'http://mathhub.info/MitM/Modelss?Quantities',
-			name = 'boltzmann_constant',
-			is_uniform = True,
-			is_constant = True,
-			dimension = '' 
-		)
-
-		self.quantity_decls['elementary_charge'] = QuantityDecl(
-			parent = 'http://mathhub.info/MitM/Modelss?Quantities',
-			name = 'elementary_charge',
-			is_uniform = True,
-			is_constant = True,
-			dimension = 'ElectricCharge' 
-		)
-
-		self.quantity_decls['electric_constant'] = QuantityDecl(
-			parent = 'http://mathhub.info/MitM/Modelss?Quantities',
-			name = 'electric_constant',
-			is_uniform = True,
-			is_constant = True,
-			dimension = 'ElectricalPermittivity' 
+			dimension = 'DimNone',
+			tensor_shape = [] 
 		)
 
 		self.quantity_decls['test_quantity2'] = QuantityDecl(
@@ -157,7 +128,8 @@ class MPD_VanRoosbrockEg(MPDBase):
 			is_uniform = True,
 			initial_value = numpy.array([[1.1 ,2.2 ,3.3] ,[4.4 ,5.5 ,6.6] ,[7.7 ,8.8 ,9.9]]),
 			is_constant = True,
-			dimension = 'ElectricalPermittivity' 
+			dimension = 'ElectricalPermittivity',
+			tensor_shape = [3,3] 
 		)
 
 		self.quantity_decls['test_quantity'] = QuantityDecl(
@@ -166,7 +138,68 @@ class MPD_VanRoosbrockEg(MPDBase):
 			is_uniform = True,
 			initial_value = numpy.array([1.1 ,2.2 ,3.3]),
 			is_constant = True,
-			dimension = 'ElectricalPermittivity' 
+			dimension = 'ElectricalPermittivity',
+			tensor_shape = [3] 
+		)
+
+		self.quantity_decls['band_energy'] = QuantityDecl(
+			parent = 'http://mathhub.info/MitM/Modelss?Constants',
+			name = 'band_energy',
+			is_uniform = False,
+			initial_value = numpy.array(8.0E-19),
+			is_constant = True,
+			dimension = 'Energy',
+			tensor_shape = [] 
+		)
+
+		self.quantity_decls['band_density'] = QuantityDecl(
+			parent = 'http://mathhub.info/MitM/Modelss?Constants',
+			name = 'band_density',
+			is_uniform = False,
+			initial_value = numpy.array(3.0E12),
+			is_constant = True,
+			dimension = 'VolumeDensity',
+			tensor_shape = [] 
+		)
+
+		self.quantity_decls['temperature'] = QuantityDecl(
+			parent = 'http://mathhub.info/MitM/Modelss?Constants',
+			name = 'temperature',
+			is_uniform = True,
+			initial_value = numpy.array(200.0),
+			is_constant = True,
+			dimension = 'Temperature',
+			tensor_shape = [] 
+		)
+
+		self.quantity_decls['boltzmann_constant'] = QuantityDecl(
+			parent = 'http://mathhub.info/MitM/Modelss?Constants',
+			name = 'boltzmann_constant',
+			is_uniform = True,
+			initial_value = numpy.array(1.3806852E-23),
+			is_constant = True,
+			dimension = '',
+			tensor_shape = [] 
+		)
+
+		self.quantity_decls['elementary_charge'] = QuantityDecl(
+			parent = 'http://mathhub.info/MitM/Modelss?Constants',
+			name = 'elementary_charge',
+			is_uniform = True,
+			initial_value = numpy.array(-1.60217662E-19),
+			is_constant = True,
+			dimension = 'ElectricCharge',
+			tensor_shape = [] 
+		)
+
+		self.quantity_decls['electric_constant'] = QuantityDecl(
+			parent = 'http://mathhub.info/MitM/Modelss?Constants',
+			name = 'electric_constant',
+			is_uniform = True,
+			initial_value = numpy.array(8.854187816999999E-12),
+			is_constant = True,
+			dimension = 'ElectricalPermittivity',
+			tensor_shape = [] 
 		)
 
 	def init_laws(self):
@@ -268,6 +301,6 @@ class MPD_VanRoosbrockEg(MPDBase):
 			substeps = [lambda state: (divergence(state['displacement'], self.space)),lambda state: (((state['charge_density'] / state['elementary_charge']) - state['doping_profile'])),lambda state: (((((numpy.log((state['electron_density'] / state['band_density'])) * (state['boltzmann_constant'] * state['temperature'])) + state['band_energy']) / state['elementary_charge']) + state['quasifermi_potential'])),lambda state: ((- gradient(state['electrostatic_potential'], self.space))),lambda state: ((state['absolute_permittivity'] * state['electric_field']))],
 			law_quantity_pairs = [('gauss_law', 'charge_density'),('charge_density_law', 'electron_density'),('electron_density_law', 'electrostatic_potential'),('electric_field_law', 'electric_field'),('displacement_relation', 'displacement')],
 			used_quantities = ['quasifermi_potential' ,'elementary_charge' ,'band_energy' ,'temperature' ,'boltzmann_constant' ,'band_density' ,'doping_profile' ,'displacement' ,'absolute_permittivity'],
-			is_cyclic = True 
+			is_cyclic = False 
 		)
 

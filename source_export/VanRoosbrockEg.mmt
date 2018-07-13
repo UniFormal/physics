@@ -1,75 +1,106 @@
-namespace http://mathhub.info/MitM/Models ❚
+namespace http://mathhub.info/MitM/Modelss ❚
 
 import qe http://mathhub.info/MitM/Foundation/Units ❚
 import fnd http://mathhub.info/MitM/Foundation ❚
 
-theory MPD : ur:?LF =
-	include qe:?QEBase
-	include qe:?Field
-
+theory Constants = 
+	include qe:?QuantityBase ❙ 
+	include qe:?DimensionsExtended ❙ 
+	
+	electric_constant : Ω → $ ElectricalPermittivity scalar ❘ # ε_0
+  	❘ = (◁, 8.854187817 *^ -12)!❘ role Constant, Uniform ❙
+
+	elementary_charge: Ω → $ ElectricCharge scalar ❘ # e 
+	  ❘ = (◁, -1.60217662 *^ -19 )!❘ role Constant, Uniform ❙
+
+	boltzmann_constant: Ω → $ (Energy /' Temperature) scalar ❘ # k_b 
+	  ❘ = (◁, 1.3806852 *^ -23)!❘ role Constant, Uniform ❙
+	
+  temperature: Ω → $ Temperature scalar ❘ # T 
+    ❘ = (◁, 200.0)!❘ role Constant, Uniform ❙
+
+	band_density: Ω → $ VolumeDensity scalar ❘ # N_c 
+	  ❘ = (◁, 3.0 *^ 12)!❘ role Constant ❙
+	
+	band_energy: Ω → $ Energy scalar ❘ # E_c 
+	  ❘ = (◁, 8.0 *^ -19)! ❘ role Constant ❙
+  
+❚
 
 theory Quantities =
-  include qe:?QEBase
-	include qe:?Field
-	include ur:?LF
-
-	electric_constant: QE ElectricalPermittivity # ε_0 role Constant
-	elementary_charge: QE ElectricCharge # q_e role Constant
+	include qe:?QuantityBase ❙ 
+	include qe:?DimensionsExtended ❙ 
+	include ?Constants ❙
+  include ur:?LF ❙
 	
-	boltzmann_constant: QE (Energy /' Temperature) # k_b role Constant 
-  temperature: QE Temperature # T role Constant
-
-	band_density: field VolumeDensity # N_c role Constant
-	band_energy: field Energy # E_c role Constant 	
+	bottle: geometry ❙
+	pencil: geometry ❙
+	
+	
+	bip: ⊦ bottle ∩ pencil ≐ ∅ ❙
+	
+	test_quantity: Ω → $ ElectricalPermittivity (vector 3)
+  	❘ = (◁, 1.1, 2.2, 3.3) ! ❘ role Constant, Uniform ❙
+  	
+  test_quantity2: Ω → $ ElectricalPermittivity (matrix 3 3)
+  	❘ = (◁, 1.1, 2.2, 3.3,
+  	        4.4, 5.5, 6.6,
+  	        7.7, 8.8, 9.9) ! ❘ role Constant, Uniform ❙
+	
+  relative_permittivity: Ω → $ DimNone scalar ❘ # ε_r 
+    ❘ = (◁, 1.0) ! ❘ role Uniform ❙
+	
+  absolute_permittivity: Ω → $ ElectricalPermittivity scalar ❘ role Uniform ❘  # ε_s
+    ❘ = (◁, 8.85418782 *^ -12) !❙
   
-  relative_permittivity: QE DimNone # ε_r
-	absolute_permittivity: QE ElectricalPermittivity # ε_s
+  current_density: Ω → $ ElectricCurrentDensity (vector 3) ❘ # j_n ❙
   
-  current_density: field ElectricCurrentDensity # j_n
+  electric_field: Ω → $ ElectricField (vector 3)❘ # E ❙
+  electrostatic_potential: Ω → $ Voltage scalar ❘ # Ψ ❙
+  quasifermi_potential: Ω → $ Voltage scalar ❘ # φ_n
+    ❘ = (◁, -4.1 *^ -19) !❙
+  displacement: Ω → $ (ElectricCharge /' (Length *' Length)) (vector 3) ❘ # D ❙
+  charge_density: Ω → $ (ElectricCharge  /' (Length *' Length *' Length)) scalar ❘ # ρ 
+    ❘ = (◁, -2.0) !❙
   
-  electric_field: field ElectricField # E
-  electrostatic_potential: field Voltage # Ψ
-  quasifermi_potential: field Voltage # φ_n
-  displacement: field (ElectricCharge /' (Length *' Length)) # D
-  charge_density: field (ElectricCharge  /' (Length *' Length *' Length)) # ρ
+  electron_density: Ω → $ VolumeDensity scalar ❘ # n
+    ❘ = (◁, -1.0 *^ -21) !❙
+    
+  doping_profile: Ω → $ VolumeDensity scalar ❘ # C 
+    ❘ = (◁, 1.0 *^ -21) ! ❙
   
-  electron_density: field VolumeDensity # n
-  doping_profile: field VolumeDensity # C
-  
-  electron_mobility : QE (Area /' (ElectricPotential *' Time)) ❘ # μ_n ❙
-  
-
+  electron_mobility : Ω → $ (Area /' (ElectricPotential *' Time)) scalar ❘ # μ_n 
+    ❘ = (◁, 1 *^ -4) ! ❙
+❚
 
-theory VanRoosbrockEg : ?MPD =
-	include ?Quantities
-	include qe:?Field
-	include qe:?QEBase
-	include fnd:?RealLiterals
+theory VanRoosbrockEg : qe:?ModelBase =
+	include ?Quantities ❙ 
+	include qe:?LawBase ❙ 
+	include ur:?LF ❙
+	include qe:?BoundaryConditionBase❙
+	include qe:?TacticBase ❙ 
 
-  
-	permitivity_law: ⊦ ε_s ≐ ε_0 ⋅ ε_r
-	permitivity_law_rule1:  ⊦ ε_r ≐ ε_s /  ε_0
+	permitivity_law: ε_s = ε_0 * ε_r ❙
+	permitivity_law_rule1:  ε_r = ε_s / ε_0❙
 	
-	gauss_law: {x: space} ⊦ ρ ≐ Δ. D
+ 	gauss_law: ρ = ∇⋅ D❙
 	
-	charge_density_law: ⊦ ρ ≐ q_e  .* (C  .-  n)
-	charge_density_law_rule1: ⊦ C ≐ ρ ./ q_e .+ n
-	charge_density_law_rule2: ⊦ n ≐ C .- (ρ ./ q_e)
+	charge_density_law: ρ = e * (C - n) ❙
+	
+	displacement_relation: D = ε_s .* E❙
+	
+	electric_field_law: E = ~ ∇ Ψ ❙
+	
+	electron_density_law: n = N_c * (exp ((e * (Ψ - φ_n) - E_c) / (k_b * T)))❙
+	
+	electron_current: j_n = ((e * μ_n * n) .* (∇ φ_n)) ❙
+	
+	electron_continuity_eqn: (∇⋅ j_n) = (◁,0.0) ! | Ω ❘ role Condition ❙
+	
+	two_potential_at_boundary : dirichlet Ψ (◁,2.0 !)❙
+	
+	cycle1: ◀ D ← displacement_relation ⬳ E ← electric_field_law ⬳ Ψ ← electron_density_law ⬳ n ← charge_density_law ⬳ ρ ← gauss_law ❙
+	
+        // solve_for_displacement: gauss_seidel cycle1 (◁,3.4 !)❙ 
 
-	displacement_law: ⊦ D ≐ ε_s .* E
-	displacement_law_rule1: ⊦ E ≐ D ./ ε_s
-	displacement_law_rule2: ⊦ ε_s .≐ D ./ E
-	
-	electric_field_law: ⊦ E ≐ .~ (Δ. Ψ)
-
-	electron_density: ⊦ n ≐ N_c .* (exp. ((q_e .* (Ψ .- φ_n) .- E_c) ./ (k_b .* T)))
-	electron_density_rule1: ⊦ Ψ ≐ (ln. (n ./ N_c) .* (k_b .* T) .+ E_c) ./ q_e .+ φ_n
-	electron_density_rule2: ⊦ φ_n ≐ Ψ .- ((ln. (n ./ N_c) .* (k_b .* T) .+ E_c) ./ q_e)
-	
-	electron_current: ⊦ j_n ≐ .~ (q_e .* μ_n .* n .* (Δ. φ_n))
-	
-	electron_continuity_eqn: {zero} ⊦ (Δ. j_n) ≐ zero role Condition
-	
-
-
-	
+❚

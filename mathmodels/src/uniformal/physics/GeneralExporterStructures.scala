@@ -52,7 +52,8 @@ abstract class QElement
       case x: QTwoForm => x.y.symbols ++ x.x.symbols
       case x: QOneForm => x.x.symbols
       case QSymbol(_, p) => this.asInstanceOf[QSymbol]::Nil
-      case _ => throw new GeneralError("Undefined construction in search of symbols")
+      case QTensorVal(a, b) => Nil
+      case _ => throw new GeneralError("Undefined construction in search of symbols: " + this.toString)
     }
   }
 }

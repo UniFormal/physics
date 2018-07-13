@@ -1,4 +1,8 @@
 import numpy
+from networkx.algorithms import bipartite
+import networkx as nx
+import matplotlib.pyplot as plt
+
 
 class MPDBase(object):
 	def __init__(self, name, parent, space, surface_integrators = []):
@@ -46,9 +50,6 @@ class MPDBase(object):
 	def __getitem__(self, law_key):
 		return self.laws[law_key]
 
-	def __getattr__(self, quantity_key):
-		return self.quantity_decls[quantity_key]
-
         def __str__(self):
 		s = "----MPD----\n"
 		s += "--name: " + self.name + '\n'
@@ -61,6 +62,38 @@ class MPDBase(object):
 		
 		return s
 
+        def pretty_mpd_graph(self):
+                graph = filter(lambda x: not self.quantity_decls[x[0]].is_constant, self.graph)
+                titlify = lambda s: s.replace("_", "\n").title()
+                graph = map(lambda x: (titlify(x[0]), titlify(x[1])), graph)
+                return graph
+
+        def generate_mpd_graphic(self):
+                edges = self.pretty_mpd_graph()
+                quantity_nodes = map(lambda e: e[0], edges)
+                law_nodes = map(lambda e: e[1], edges)
+
+                G=nx.MultiGraph()
+
+                G.add_nodes_from(quantity_nodes, bipartite=0)
+                G.add_nodes_from(law_nodes, bipartite=1)
+                G.add_edges_from(edges)
+                print(nx.is_connected(G))
+                pos=nx.spring_layout(G, iterations=10000)
+                #print(pos)
+                g0, g1 = bipartite.sets(G)
+
+
+                nx.draw_networkx_nodes(g0, pos, with_labels = True, node_size=300, scale = 300, node_shape="o", prog='dot', node_color=(1, 0.8, 0.8))
+
+                nx.draw_networkx_nodes(g1, pos, with_labels = True, node_size=800, scale = 300, node_shape="s", prog='dot',node_color=(0.7, 0.8, 1.0))
+
+                nx.draw_networkx_edges(G, pos, edge_color="grey", style="dashed")
+
+                nx.draw_networkx_labels(G, pos, font_size=8)
+
+                plt.show()
+        
         def init_cycles(self):
                 def traverse(hist):
                         start = hist[0]
@@ -108,7 +141,11 @@ class ComputationStep:
 		return self.compute_lambda(state)
 
 	def compute_and_update(self, state):
-		state[quantityDecl.name] = self.compute_lambda(state)
+		state[self.law_quantity_name_pairs[-1][1]] = self.compute_lambda(state)
+
+        def compute_substeps_and_update(self, state):
+                for pair in self.law_quantity_name_pairs:
+                        state[pair[1]] = state.mpd[pair[0]][pair[1]](state)
 
 class Declaration:
 	def __init__(self, name, parent):
@@ -123,7 +160,15 @@ class Declaration:
 class QuantityDecl(Declaration):
 	def __init__(self, **kwargs):
 		Declaration.__init__(self, kwargs["name"], kwargs["parent"])
-		self.initial_value = kwargs["initial_value"] or 0.0
+                self.tensor_shape = kwargs["tensor_shape"]
+                if "initial_value" in kwargs.keys():
+                        self.initial_value = kwargs["initial_value"]
+                else:
+                        vec = numpy.array(0.0)
+                        for x in self.tensor_shape:
+                                vec = numpy.repeat(vec, x, axis=0)
+                        self.initial_value = vec
+                        
 		self.dimension = kwargs["dimension"]
 		self.is_uniform = kwargs["is_uniform"]
 		self.is_constant = kwargs["is_constant"]
@@ -183,8 +228,16 @@ class MPDState:
 		self.__dict__['mpd'] = mpd
                 self.__dict__['state_values'] = {}
                 for n in mpd.quantity_decls:
-                        self.state_values[n] = n.initial_value
-                
+                        i = mpd.quantity_decls[n].initial_value
+                        shape = mpd.space.shape
+                        if len(i.shape) == 0:
+                                i = numpy.array([float(i)])
+                        if len(shape) == 1:
+                                self.state_values[n] = numpy.tile(i.flatten(), shape[0]).reshape(list(shape)+list(i.shape))
+                        else:
+                                allG = [numpy.repeat(i, shape[x+1], axis=0) for x in range(shape[0])]
+                                self.state_values[n] = numpy.meshgrid(*allG)
+                        
 	def update(self):
 		for q in self.mpd.quantity_decls:
 			if isinstance(q, DerivedQuantityDecl):
@@ -194,10 +247,18 @@ class MPDState:
 		s = "----MPD State----\n"
 
 		for sk in self.state_values:
+                        print(sk)
 			s += sk + ": " + str(self.state_values[sk]) + '\n'
 		
 		return s
 
+        def gauss_seidel(self, cycle_name, epsilon):
+                while True:
+                        self.mpd.computation_steps[cycle_name].compute_substeps_and_update(self)
+                        if (self.mpd[self.mpd.computation_steps[cycle_name].law_quantity_name_pairs[-1][0]].law_test(self) < epsilon).all():
+                                break
+
+        
 	def __getitem__(self, quantity_name):
 		return self.state_values[quantity_name]
 
@@ -239,10 +300,13 @@ def derivative_on_space(image, dom):
         return numpy.append(deriv, deriv[-1])
 
 def gradient(scalar_field, dom_grids):
-        ds = numpy.diff(dom_grids[-1])[0][0]
-        print(ds)
-        return numpy.gradient(scalar_field, ds)
+        #ds = numpy.diff(dom_grids[-1])[0][0]
+        #print(ds)
+        #print(scalar_field)
+        return numpy.gradient(scalar_field.reshape([10]))
 
 def divergence(vector_field, dom_grids):
-        ds = numpy.diff(dom_grids[-1])[0][0]
-        return np.sum(np.gradient(vector_field, ds),axis=0)
+        #ds = numpy.diff(dom_grids[-1])[0][0]
+        div = numpy.sum(numpy.gradient(vector_field))
+        #print("Div", vector_field, div)
+        return div
