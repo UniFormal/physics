@@ -1,4 +1,5 @@
 #+TITLE: Physical MPD Models MMT Extension
+#+STARTUP: inlineimages
 
 * About
 Provides build targets for physical models formulated in [[https://uniformal.github.io/][MMT]]. 
