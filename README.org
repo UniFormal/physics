@@ -27,3 +27,34 @@ and then proceed to generate python files corresponding to the theories with:
   build MitM/Models mpd-python  
 #+END_SRC
 
+As an example, a toy model was written in [[./source_export/VanRoosbrockEg.mmt][VanRoosbrockEg.mmt]]. The generated
+python file is [[./source_export/python/VanRoosbrockEg.py][VanRoosbrockEg.py]]. One can immediately attempt iterative
+methods like Gauss-Seidel to solve for the electric displacement $D$ using
+the cycle labeled =cycle1=:
+#+BEGIN_SRC
+import VanRoosbrockEg
+from mpdbase import *
+import numpy as np
+
+model = VanRoosbrockEg.MPD_VanRoosbrockEg(np.linspace(0, 0.5, 10))
+state = MPDState(model)
+state.gauss_seidel("cycle1", epsilon=1e-3)
+print(state)
+#+END_SRC
+
+In general, from the =Model= object, one has access to the laws of the 
+Model using =model['law_name']= and the quantities using 
+=model.quantity_name=. For instance, one can compute evaluate the law
+=gauss_law= and assign it to the current value of =charge_density= in
+the state:
+#+BEGIN_SRC
+state.charge_density = model['gauss_law'].charge_density(state)
+#+END_SRC
+
+The model object also provides with a method to generate a rough *MPD*
+plot of the model:
+#+BEGIN_SRC
+model.plot_mpd_graphic()
+#+END_SRC
+generates:
+[[./source_export/mpd.png][mpd.png]]

@@ -68,7 +68,7 @@ class MPDBase(object):
                 graph = map(lambda x: (titlify(x[0]), titlify(x[1])), graph)
                 return graph
 
-        def generate_mpd_graphic(self):
+        def plot_mpd_graphic(self):
                 edges = self.pretty_mpd_graph()
                 quantity_nodes = map(lambda e: e[0], edges)
                 law_nodes = map(lambda e: e[1], edges)
@@ -79,14 +79,14 @@ class MPDBase(object):
                 G.add_nodes_from(law_nodes, bipartite=1)
                 G.add_edges_from(edges)
                 print(nx.is_connected(G))
-                pos=nx.spring_layout(G, iterations=10000)
+                pos=nx.spring_layout(G, iterations=1000, k=1.0/numpy.sqrt(len(G)), scale=2.0)
                 #print(pos)
                 g0, g1 = bipartite.sets(G)
 
 
                 nx.draw_networkx_nodes(g0, pos, with_labels = True, node_size=300, scale = 300, node_shape="o", prog='dot', node_color=(1, 0.8, 0.8))
 
-                nx.draw_networkx_nodes(g1, pos, with_labels = True, node_size=800, scale = 300, node_shape="s", prog='dot',node_color=(0.7, 0.8, 1.0))
+                nx.draw_networkx_nodes(g1, pos, with_labels = True, node_size=600, scale = 300, node_shape="s", prog='dot',node_color=(0.7, 0.8, 1.0))
 
                 nx.draw_networkx_edges(G, pos, edge_color="grey", style="dashed")
 
@@ -252,7 +252,7 @@ class MPDState:
 		
 		return s
 
-        def gauss_seidel(self, cycle_name, epsilon):
+        def gauss_seidel(self, cycle_name, epsilon=1e-3):
                 while True:
                         self.mpd.computation_steps[cycle_name].compute_substeps_and_update(self)
                         if (self.mpd[self.mpd.computation_steps[cycle_name].law_quantity_name_pairs[-1][0]].law_test(self) < epsilon).all():
