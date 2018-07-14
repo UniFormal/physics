@@ -59,4 +59,4 @@ model.plot_mpd_graphic()
 #+END_SRC
 generates:
 
-[[https://i.imgur.com/tXA3dXP.png][mpd.png]]
+[[https://i.imgur.com/tXA3dXP.png][https://i.imgur.com/tXA3dXP.png]]
