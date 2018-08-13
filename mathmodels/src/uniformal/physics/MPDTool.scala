@@ -13,19 +13,24 @@ import info.mathhub.lf.MitM.Foundation._
 import Units.Units._
 import Units.Dimensions._
 import Units.QuantityBase._
+import Units.FieldBase._
 import Units.LawBase._
 import Units.GeometryBase._
 import Units.TacticBase._
-import Units.BoundaryConditionBase._
+// import Units.BoundaryConditionBase._
 
 import info.mathhub.lf.MitM.Foundation.RealLiterals._
 import info.mathhub.lf.MitM.Foundation.NatLiterals._
 import info.mathhub.lf.MitM.Foundation.Tensors._
 
+import info.mathhub.lf.MitM.Foundation.Logic
+import info.kwarc.mmt.odk._
+
+
 class MPDTool(controller: Controller) {
   val ruleRegex = """^([\p{L}_]+)?(_rule(\d+))?$""".r
   
-  def toFormula(t: Term): Formula = {
+  def toFormula(t: Term, args: List[(Option[LocalName], Term)]): Formula = {
     t match { 
        // TODO: let Formula take dimension instead of type
        case Logic._eq(tp, lhs, rhs) => {
@@ -36,7 +41,7 @@ class MPDTool(controller: Controller) {
              p
            case _ => throw new GeneralError("LHS of rule should be a constant symbol, not " + lhs.toString)
          }
-         Formula(tp, lhs, rhs)
+         Formula(tp, lhs, rhs, args)
        }
        case _ => throw new scala.MatchError("Error")
      }
@@ -44,9 +49,9 @@ class MPDTool(controller: Controller) {
    
    def toQuantity(value: Term, tp: Term): MQuantity = MQuantity(value, tp)
   
-   def toQElement(value: Term) = (new QuantityExpression(value)).expr
+   def toQElement(value: Term, args: List[(Option[LocalName], Term)]) = (new QuantityExpression(value, args)).expr
    
-   def getRule(formula: Formula, ruleNumber: Option[Int]): List[Rule] = {
+   def getRule(formula: Formula, ruleNumber: Option[Int], args: List[(Option[LocalName], Term)]): List[Rule] = {
          val solvedVar = formula.lhs match {
            case OMS(p) => QSymbol(p.name.toString, p)
            case ApplyGeneral(f, x) =>
@@ -54,14 +59,14 @@ class MPDTool(controller: Controller) {
              QSymbol(p.name.toString, p)
            case _ => throw new GeneralError("LHS of rule should be a constant symbol, not: " + formula.lhs.toString)
          }
-         List(Rule(solvedVar, toQElement(formula.rhs), ruleNumber)) 
+         List(Rule(solvedVar, toQElement(formula.rhs, args), ruleNumber)) 
    }
    
    def toStepDecl(parent: MPath, name: LocalName, tp: Term): StepDecl = {
      def getStepPairList(t: Term): List[(GlobalName, GlobalName)] =
      t match {
-       case StepAggregate(agg, MakeStep(OMS(quantityPath), OMS(lawPath))) => (quantityPath, lawPath)::getStepPairList(agg)
-       case MakeStep(OMS(quantityPath), OMS(lawPath)) => (quantityPath, lawPath)::Nil
+      // case StepAggregate(agg, MakeStep(OMS(quantityPath), OMS(lawPath))) => (quantityPath, lawPath)::getStepPairList(agg)
+      // case MakeStep(OMS(quantityPath), OMS(lawPath)) => (quantityPath, lawPath)::Nil
        case _ => {
          throw new GeneralError("Unidentified component in step: " + t.toString)
        }
@@ -69,7 +74,7 @@ class MPDTool(controller: Controller) {
      StepDecl(parent, name, getStepPairList(tp))
    }
    
-   def toEqualityLaw(parent: MPath, name: LocalName, lhs: Term, rhs: Term, dim: Term, dom: Term, rl: Option[String]) : Law = {
+   def toEqualityLaw(parent: MPath, name: LocalName, lhs: Term, rhs: Term, tp: Term, args: List[(Option[LocalName], Term)], rl: Option[String]) : Law = {
      val solvedPath = lhs match {
        case OMS(p) => p
        case ApplyGeneral(f, x) =>
@@ -77,9 +82,9 @@ class MPDTool(controller: Controller) {
          p
        case _ => throw new GeneralError("LHS of rule should be a constant symbol, not " + lhs.toString)
      }
-     val formula = Formula(dim, lhs, rhs)
+     val formula = Formula(tp, lhs, rhs, args)
      val (lawName, ruleNumber) = getRuleNameData(name.toString)
-     Law(parent, LocalName.parse(lawName), formula, getRule(formula, ruleNumber), rl != Some("Condition"))
+     Law(parent, LocalName.parse(lawName), formula, getRule(formula, ruleNumber, args), rl != Some("Condition"))
    }
    
    def getRuleNameData(name: String): (String, Option[Int]) = {
@@ -103,7 +108,6 @@ class MPDTool(controller: Controller) {
             case nat_underscore_lit(e) => get_list_recursive(b, (x.toString)::tail)
           }
         }
-        case rnil(p) => return tail
         case nnil(p) => return tail
       }
     }
@@ -115,10 +119,21 @@ class MPDTool(controller: Controller) {
        case tensor_underscore_type(l) => {
          makeListFromListTerm(l).map(n => n.toInt)
        }
-       case Tensors.scalar(l) => List()
-       case Tensors.vector(i) => List(i.toString.toInt)
-       case Tensors.matrix(j,k) => List(j.toString.toInt, k.toString.toInt)
+       case Tensors.Scalar(l) => List()
+       case Tensors.Vector(i) => List(i.toString.toInt)
+       case Tensors.Matrix(j,k) => List(j.toString.toInt, k.toString.toInt)
        case _ => throw new GeneralError("Can't recognize tensor type: " + tensorType.toString)
+     }
+   }
+   
+   def toRuleComponent(c: Constant, x: Term, args: List[(Option[LocalName], Term)]) = {
+     x match {
+       case Logic._eq(tp, lhs, rhs) if c.rl.get.contains("Law") => {
+         Some(toEqualityLaw(c.parent, c.name, lhs, rhs, tp, args, c.rl))
+       }
+       //case x if c.rl.get.contains("ComputationStep") => 
+       //  throw new GeneralError(args)
+       case _ => None
      }
    }
    
@@ -130,33 +145,60 @@ class MPDTool(controller: Controller) {
            case Some(t) =>
              val FunType(args, ret) = t
              ret match {
-               
-               case Quantity(l, geom, dim, tens) =>
+               case Quantity(l, dim, tens) =>
                  val df = c.df.map{t => toQuantity(t, ret)}
-                 Some(QuantityDecl(c.parent, c.name, l, geom, dim, getTensorRankShape(tens), df, 
-                     c.rl != None && c.rl.get.contains("Uniform"), 
+                 Some(QuantityDecl(c.parent, c.name, l, None, dim, getTensorRankShape(tens), df,
+                     false,
+                     false, 
                      c.rl != None && c.rl.get.contains("Constant")))
               
-               case geometry(p) =>
-                 Some(GeometryDecl(c.parent, c.name))
+               case Arrow(g, Quantity(l, dim, tens)) => 
+                 val df = c.df.map{t => toQuantity(t, ret)}
+                 Some(QuantityDecl(c.parent, c.name, l, Some(g), dim, getTensorRankShape(tens), df,
+                     false,
+                     true, 
+                     c.rl != None && c.rl.get.contains("Constant")))    
+                 
+               case Univ(1) if c.df != None => /* Univ(ktype) = Univ(1) = type */
+                 c.df.get match {
+                   case construct_underscore_geometry(f) =>
+                     Some(GeometryDecl(c.parent, c.name, f))
+                   case make_underscore_discrete_underscore_geometry(t) =>
+                     None
+                   case _ => throw new GeneralError("Undefined definition to oftype object: " + c.df.get.toString)
+                 }
                
-               case EqualityLaw(g1, g2, dim, l, tens, lhs, rhs) =>
-                 Some(toEqualityLaw(c.parent, c.name, lhs, rhs, dim, EVERYWHERE, c.rl))
-               case EqualityLawOnDomain(g1, g2, dim, l, tens, lhs, rhs, dom) =>
-                 Some(toEqualityLaw(c.parent, c.name, lhs, rhs, dim, dom, c.rl))
-   
-               case Logic.ded(x) =>
+               case sequence_underscore_type(make_underscore_discrete(args)) =>                 
+                 Some(QuantitySequenceDecl(args._5.toMPath.^, args._5.toMPath.toGlobalName.name))
+               
+               case make_underscore_discrete(args) =>
                  None
+                 
+               case subtypeJudg(t1, t2) =>
+                 None
+                 
+               case Logic.ded(x) =>
+                 x match {
+                   case Logic._eq(tp, lhs, rhs) if c.rl.get.contains("Law") => {
+                     Some(toEqualityLaw(c.parent, c.name, lhs, rhs, tp, args, c.rl))
+                   }
+                   case x if c.rl.get.contains("ComputationStep") => 
+                     throw new GeneralError(args.toString())
+                   case _ => None
+                 }
+                 
+               case Pi(name, tp, body) =>
+                 throw new GeneralError("hodgepodge")
                  
                case Dirichlet(l, g, d, t, q, b) =>
                  println(g)
                  None
                  
-               case GetStepType(a) =>
-                 Some(toStepDecl(c.parent, c.name, a))
+              // case GetStepType(a) =>
+              //   Some(toStepDecl(c.parent, c.name, a))
                  
                case d =>
-                 throw new GeneralError("Unknown construction of MPD component: " + c.name.toString + "..." +   d.toString())
+                 throw new GeneralError("Unknown construction of MPD component: " + c.name.toString + "..." +  d.toString())
              }
          }
    }
@@ -168,7 +210,7 @@ class MPDTool(controller: Controller) {
          val comp = toMPDComponent(c)
          if (comp != None) comps ::= comp.get}
        case Include(_, from, _) => {
-         if (from.parent.toString == "http://mathhub.info/MitM/Modelss")
+         if (from.parent.toString == "http://mathhub.info/MitM/Models")
            comps ++= getMPDComponentsFromTheory(controller.get(from).asInstanceOf[DeclaredTheory])
        }
        case _ => throw new GeneralError("Unsupported construct for mpd theory")
@@ -242,7 +284,24 @@ class MPDTool(controller: Controller) {
          case space if space.isInstanceOf[QuantitySpaceDecl] => 
            spaces ::= space.asInstanceOf[QuantitySpaceDecl]
            
-         case _ => throw new scala.MatchError("Error")
+         case seq if seq.isInstanceOf[QuantitySequenceDecl] =>
+           val newSeq = seq.asInstanceOf[QuantitySequenceDecl]
+           val quantitySeqIndex = quantityDecls.indexWhere(x => (x.parent ? x.name) == (newSeq.quantityParent ? newSeq.quantityName))
+           if (quantitySeqIndex == -1)
+             throw GeneralError("Can't find quantity referred to in sequence: " + newSeq)
+           quantityDecls = quantityDecls.updated(quantitySeqIndex, QuantityDecl(quantityDecls(quantitySeqIndex).parent,
+                                  quantityDecls(quantitySeqIndex).name,
+                                  quantityDecls(quantitySeqIndex).l,
+                                  quantityDecls(quantitySeqIndex).geom,
+                                  quantityDecls(quantitySeqIndex).dim,
+                                  quantityDecls(quantitySeqIndex).tensRank,
+                                  quantityDecls(quantitySeqIndex).df,
+                                  true,
+                                  quantityDecls(quantitySeqIndex).isField,
+                                  quantityDecls(quantitySeqIndex).isConstant))
+                            
+           
+         case _ => throw new GeneralError("MPD component not handled")
        }
      }
      Some(MPD(thy.parent, thy.name, quantityDecls, laws, computationSteps, integrationSurfaces, spaces))

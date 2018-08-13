@@ -3,6 +3,9 @@
 	<name>physics</name>
 	<comment></comment>
 	<projects>
+		<project>Foundation</project>
+		<project>mmt-api</project>
+		<project>src_mmt-lf</project>
 	</projects>
 	<buildSpec>
 		<buildCommand>

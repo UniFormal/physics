@@ -118,6 +118,11 @@ class MPDBase(object):
                 # we cast to set to remove repeating elements
                 self.cycles = list(set(self.cycles))
 
+
+class Geometry:
+        def __init__(self, name, parent):
+                
+                
 class ComputationStep:
 	def __init__(self, **kwargs):
 		self.name = kwargs["name"]
@@ -147,6 +152,7 @@ class ComputationStep:
                 for pair in self.law_quantity_name_pairs:
                         state[pair[1]] = state.mpd[pair[0]][pair[1]](state)
 
+                        
 class Declaration:
 	def __init__(self, name, parent):
 		self.name = name

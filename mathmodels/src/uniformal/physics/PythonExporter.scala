@@ -50,14 +50,13 @@ class PythonExporter extends Exporter {
         params ::= q.asInstanceOf[QSymbol]
         state + "['" + ensureIdentifierString(x) + "']"
       }
-      case t => throw LocalError("Match Error:" + t)
+      case t => 
+        throw LocalError("Match Error:" + t)
     }
     (f(qElement), params.distinct)
   }
   
-  private def makePyTensor(tensorRankList: Term, tensorElementsList: Term): String = {
-    val tensorRankDims = makeListFromListTerm(tensorRankList).map(s => s.toInt)
-    val tensorElements = makeListFromListTerm(tensorElementsList)
+  private def makePyTensor(tensorRankDims: List[Int], tensorElements: List[String]): String = {
     val numberOfElementsRequired = tensorRankDims.foldRight(1){(acc, i)=>(acc *(i)) }
     if (numberOfElementsRequired != tensorElements.size)
        throw new GeneralError("Tensor rank incompatable with number of elements: " + numberOfElementsRequired.toString)
@@ -69,7 +68,7 @@ class PythonExporter extends Exporter {
     }
     s"numpy.array(${form_tensor_recursive(tensorElements, tensorRankDims)})"
   }
-  
+  /*
   private def makeListFromListTerm(l: Term): List[String] = {
     def get_list_recursive(t: Term, tail: List[String]) : List[String] = {
       t match {
@@ -79,12 +78,11 @@ class PythonExporter extends Exporter {
             case nat_underscore_lit(e) => get_list_recursive(b, (x.toString)::tail)
           }
         }
-        case rnil(p) => return tail
         case nnil(p) => return tail
       }
     }
     get_list_recursive(l, Nil)
-  }
+  }*/
   
   private def makeRealStringFromRealTerm(r:Term): String = {
     r match {
@@ -103,8 +101,8 @@ class PythonExporter extends Exporter {
   private def makeExpressionPyLambda(state: String , qexpr: QuantityExpression): String = 
     s"lambda $state: ${makeExpressionPyLambda(state, qexpr.expr)}"
   
-  private def makeExpressionPyLambda(state: String, value: Term): String = {
-    val expr = new QuantityExpression(value)
+  private def makeExpressionPyLambda(state: String, value: Term, args: List[(Option[LocalName], Term)]): String = {
+    val expr = new QuantityExpression(value, args)
     makeExpressionPyLambda(state, expr)
   }
   
@@ -131,7 +129,7 @@ class PythonExporter extends Exporter {
     list.mkString("[", " ,", "]")
     
   private def makeConstQuantityExpression(value: Term): String = {
-    val expr = new QuantityExpression(value, true)
+    val expr = new QuantityExpression(value, List(), true)
     makePythonExpression(expr.expr, "")._1
   }
     
@@ -144,8 +142,9 @@ class PythonExporter extends Exporter {
             case OMS(p) => s"'${p.name.toString}'"
             case _ => "''"
           }),
-          "is_uniform" -> {if (q.isUniform) "True" else "False"} ,
+          "is_field" -> {if (q.isField) "True" else "False"} ,
           "is_constant" -> {if (q.isConstant) "True" else "False"},
+          "is_sequence" -> {if (q.isDiscreteSequence) " True" else "False"},
           "tensor_shape" -> s"[${q.tensRank.mkString(",")}]"
       )
       if (q.df != None)
@@ -157,9 +156,9 @@ class PythonExporter extends Exporter {
     
   private def lawsPyAttributes(mpd: MPD) = 
     mpd.laws.map(l => {
-      val lawLhsExpr = new QuantityExpression(l.formula.lhs)
+      val lawLhsExpr = new QuantityExpression(l.formula.lhs, l.formula.args)
       val (lhsStr, lhsParams) = makePythonExpression(lawLhsExpr.expr, "state")
-      val lawRhsExpr = new QuantityExpression(l.formula.rhs)
+      val lawRhsExpr = new QuantityExpression(l.formula.rhs, l.formula.args)
       val (rhsStr, rhsParams) = makePythonExpression(lawRhsExpr.expr, "state")
       val out = Map(
           "name" -> s"'${l.name.toString}'",
@@ -225,16 +224,19 @@ ${pyIndent(1)}def init_quantity_decls(self):
 ${pyIndent(2)}${quantityDeclsPyAttributes(mpd).map{
   mp => pyObjectAssignment(s"self.quantity_decls[${mp("name")}]", "QuantityDecl", mp, 2)}.mkString("\n\n"+pyIndent(2))
 }
+${pyIndent(2)}pass
 
 ${pyIndent(1)}def init_laws(self):
 ${pyIndent(2)}${lawsPyAttributes(mpd).map{
   mp => pyObjectAssignment(s"self.laws[${mp("name")}]", "Law", mp, 2)}.mkString("\n\n"+pyIndent(2))
 }
+${pyIndent(2)}pass
 
 ${pyIndent(1)}def init_computation_steps(self):
 ${pyIndent(2)}${computationStepsPyAttributes(mpd).map{
   mp => pyObjectAssignment(s"self.computation_steps[${mp("name")}]", "ComputationStep", mp, 2)}.mkString("\n\n"+pyIndent(2))
 }
+${pyIndent(2)}pass
 
 """
 
@@ -262,5 +264,5 @@ ${pyIndent(2)}${computationStepsPyAttributes(mpd).map{
   
   def exportDocument(doc: Document, bf: BuildTask) {}
   
-  def exportView(view: DeclaredView, bf: BuildTask) {}
+  def exportView(view: DeclaredView, bf: BuildTask) {} 
 }

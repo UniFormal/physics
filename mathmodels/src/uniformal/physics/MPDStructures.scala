@@ -13,9 +13,10 @@ import Units.GeometryBase._
 import Units.BoundaryConditionBase._
 import Units.TacticBase._
 
+
 @deprecated("use QElement instead", "")
 case class MQuantity(value: Term, tp:Term, isUniform: Boolean = false, isConstant: Boolean = false) {
-  def times(q: MQuantity) = {
+  /* def times(q: MQuantity) = {
     (tp, q.tp) match {
        case (Quantity(l1, g1, d1, t1), Quantity(l2, g2, d2, t2)) if l1 == l2 && t1 == t2 => 
          MQuantity(QuantityMul(d1, d2, g1, g2, l1, t1, value, q.value), 
@@ -49,7 +50,7 @@ case class MQuantity(value: Term, tp:Term, isUniform: Boolean = false, isConstan
              Quantity(l1, GeometryIntersection(g1, g2), d1, t1), false)
        case _ => throw new GeneralError("Subtraction doesn't make sense for : " + (tp, q.tp))
     }
-  }
+  } */
   
 /*  def exp(q: MQuantity) = {
     (tp, q.tp) match {
@@ -89,9 +90,9 @@ case class MQuantity(value: Term, tp:Term, isUniform: Boolean = false, isConstan
   }
 }
 
-case class Formula(tp: Term, lhs: Term, rhs: Term) {
-  lazy val lhsQuantityExp = new QuantityExpression(lhs)
-  lazy val rhsQuantityExp = new QuantityExpression(rhs)
+case class Formula(tp: Term, lhs: Term, rhs: Term, args: List[(Option[LocalName], Term)]) {
+  lazy val lhsQuantityExp = new QuantityExpression(lhs, args)
+  lazy val rhsQuantityExp = new QuantityExpression(rhs, args)
 }
 
 
@@ -102,7 +103,7 @@ case class QuantitySpaceDecl(parent: MPath, name: LocalName) extends MPDComponen
   def path = parent?name
 }
 
-case class GeometryDecl(parent: MPath, name: LocalName) extends MPDComponent
+case class GeometryDecl(parent: MPath, name: LocalName, domain: Term) extends MPDComponent
 
 case class IntegrationSurfaceDecl(parent: MPath, name: LocalName) extends MPDComponent
 
@@ -112,7 +113,9 @@ case class StepDecl(parent: MPath, name: LocalName, quantityLawPairPaths: List[(
 
 trait MPDNode
 
-case class QuantityDecl(parent: MPath, name: LocalName, l: Term, geom: Term , dim: Term, tensRank: List[Int], df: Option[MQuantity], isUniform: Boolean, isConstant: Boolean) extends MPDComponent with MPDNode {
+case class QuantitySequenceDecl(quantityParent: MPath, quantityName: LocalName) extends MPDComponent
+
+case class QuantityDecl(parent: MPath, name: LocalName, l: Term, geom: Option[Term] , dim: Term, tensRank: List[Int], df: Option[MQuantity], isDiscreteSequence: Boolean, isField: Boolean, isConstant: Boolean) extends MPDComponent with MPDNode {
   def path = parent ? name // '?' forms global name
   //def toQuantity = MQuantity(OMS(path), Quantity(l, geom, dim, tens), isUniform, isConstant)
   def toQSymbol = QSymbol(name.toString, path)
@@ -165,6 +168,8 @@ case class Law(parent: MPath, name: LocalName, formula: Formula, additionalRules
   
   def solvableQuantities(qs: List[QuantityDecl]) = qs.filter(rules.map(_.solved.path) contains _.path)
 }
+
+trait GeneralComputationStep
 
 case class Step(law: Law, quantityDecl: QuantityDecl){
   // a step is function if its law is (for its quantity)
