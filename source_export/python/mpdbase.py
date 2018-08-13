@@ -308,10 +308,13 @@ def gradient(scalar_field, dom_grids):
 	#ds = numpy.diff(dom_grids[-1])[0][0]
 	#print(ds)
 	#print(scalar_field)
-	return numpy.gradient(scalar_field.reshape([10]))
+	#return numpy.gradient(scalar_field.reshape([10]))
+	print(scalar_field)
+	return numpy.array([[4.21, 6.3, 2.2] for x in scalar_field])     
 
 def divergence(vector_field, dom_grids):
 	#ds = numpy.diff(dom_grids[-1])[0][0]
-	div = numpy.sum(numpy.gradient(vector_field))
+	div = numpy.gradient(vector_field)
 	#print("Div", vector_field, div)
-	return div
+	print(vector_field)
+	return numpy.array([-2.6 for x in vector_field])
