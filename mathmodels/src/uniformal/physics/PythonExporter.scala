@@ -13,6 +13,8 @@ import info.mathhub.lf.MitM.Foundation.Tensors._
 import info.mathhub.lf.MitM.Foundation.RealLiterals._
 import info.mathhub.lf.MitM.Foundation.NatLiterals._
 
+import uniformal.physics.Quantities._
+import uniformal.physics.Geometries._
 
 class PythonExporter extends Exporter {
   override val outExt = "py"
@@ -33,9 +35,9 @@ class PythonExporter extends Exporter {
     out
   }
   
-  def makePythonExpression(qElement: QElement, state: String): (String, List[QSymbol])= {
+  def makePythonExpression(qElement: QStructure, state: String): (String, List[QSymbol])= {
     var params: List[QSymbol] = Nil
-    def f(q: QElement):String = q match {
+    def f(q: QStructure):String = q match {
       case QMul(x, y) => s"(${f(x)} * ${f(y)})"
       case QDiv(x, y) => s"(${f(x)} / ${f(y)})"
       case QAdd(x, y) => s"(${f(x)} + ${f(y)})"
@@ -97,16 +99,12 @@ class PythonExporter extends Exporter {
       case a => a.toString
     }
   }
-  
-  private def makeExpressionPyLambda(state: String , qexpr: QuantityExpression): String = 
-    s"lambda $state: ${makeExpressionPyLambda(state, qexpr.expr)}"
-  
+    
   private def makeExpressionPyLambda(state: String, value: Term, args: List[(Option[LocalName], Term)]): String = {
-    val expr = new QuantityExpression(value, args)
-    makeExpressionPyLambda(state, expr)
+    makeExpressionPyLambda(state, MakeQuantityExpressionFromTerm(value, args))
   }
   
-  private def makeExpressionPyLambda(state: String, expr: QElement): String =
+  private def makeExpressionPyLambda(state: String, expr: QStructure): String =
         s"lambda $state: ${makePythonExpression(expr, state)._1}"
 
   
@@ -129,8 +127,7 @@ class PythonExporter extends Exporter {
     list.mkString("[", " ,", "]")
     
   private def makeConstQuantityExpression(value: Term): String = {
-    val expr = new QuantityExpression(value, List(), true)
-    makePythonExpression(expr.expr, "")._1
+    makePythonExpression(MakeQuantityExpressionFromTerm(value, List(), true), "")._1
   }
     
   private def quantityDeclsPyAttributes(mpd: MPD) = {
@@ -156,10 +153,8 @@ class PythonExporter extends Exporter {
     
   private def lawsPyAttributes(mpd: MPD) = 
     mpd.laws.map(l => {
-      val lawLhsExpr = new QuantityExpression(l.formula.lhs, l.formula.args)
-      val (lhsStr, lhsParams) = makePythonExpression(lawLhsExpr.expr, "state")
-      val lawRhsExpr = new QuantityExpression(l.formula.rhs, l.formula.args)
-      val (rhsStr, rhsParams) = makePythonExpression(lawRhsExpr.expr, "state")
+      val (lhsStr, lhsParams) = makePythonExpression(l.formula.lhs, "state")
+      val (rhsStr, rhsParams) = makePythonExpression(l.formula.rhs, "state")
       val out = Map(
           "name" -> s"'${l.name.toString}'",
           "parent" -> s"'${l.parent.toString}'",

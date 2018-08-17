@@ -26,40 +26,21 @@ import info.mathhub.lf.MitM.Foundation.Tensors._
 import info.mathhub.lf.MitM.Foundation.Logic
 import info.kwarc.mmt.odk._
 
+import uniformal.physics.Quantities._
+import uniformal.physics.Geometries._
 
 class MPDTool(controller: Controller) {
   val ruleRegex = """^([\p{L}_]+)?(_rule(\d+))?$""".r
-  
-  def toFormula(t: Term, args: List[(Option[LocalName], Term)]): Formula = {
-    t match { 
-       // TODO: let Formula take dimension instead of type
-       case Logic._eq(tp, lhs, rhs) => {
-         val solvedPath = lhs match {
-           case OMS(p) => p
-           case ApplyGeneral(f, x) =>
-             val OMS(p) = f
-             p
-           case _ => throw new GeneralError("LHS of rule should be a constant symbol, not " + lhs.toString)
-         }
-         Formula(tp, lhs, rhs, args)
-       }
-       case _ => throw new scala.MatchError("Error")
-     }
-   }
    
    def toQuantity(value: Term, tp: Term): MQuantity = MQuantity(value, tp)
   
-   def toQElement(value: Term, args: List[(Option[LocalName], Term)]) = (new QuantityExpression(value, args)).expr
+   def toQStructure(value: Term, args: List[(Option[LocalName], Term)]) = MakeQuantityExpressionFromTerm(value, args)
    
    def getRule(formula: Formula, ruleNumber: Option[Int], args: List[(Option[LocalName], Term)]): List[Rule] = {
-         val solvedVar = formula.lhs match {
-           case OMS(p) => QSymbol(p.name.toString, p)
-           case ApplyGeneral(f, x) =>
-             val OMS(p) = f
-             QSymbol(p.name.toString, p)
-           case _ => throw new GeneralError("LHS of rule should be a constant symbol, not: " + formula.lhs.toString)
-         }
-         List(Rule(solvedVar, toQElement(formula.rhs, args), ruleNumber)) 
+         if (!formula.lhs.isInstanceOf[QSymbol])
+           throw new GeneralError("LHS of rule should be a constant symbol, not " + formula.lhs.toString)
+     
+         List(Rule(formula.lhs.asInstanceOf[QSymbol], formula.rhs, ruleNumber)) 
    }
    
    def toStepDecl(parent: MPath, name: LocalName, tp: Term): StepDecl = {
@@ -74,17 +55,18 @@ class MPDTool(controller: Controller) {
      StepDecl(parent, name, getStepPairList(tp))
    }
    
-   def toEqualityLaw(parent: MPath, name: LocalName, lhs: Term, rhs: Term, tp: Term, args: List[(Option[LocalName], Term)], rl: Option[String]) : Law = {
-     val solvedPath = lhs match {
-       case OMS(p) => p
-       case ApplyGeneral(f, x) =>
-         val OMS(p) = f
-         p
-       case _ => throw new GeneralError("LHS of rule should be a constant symbol, not " + lhs.toString)
-     }
-     val formula = Formula(tp, lhs, rhs, args)
+   def toEqualityLaw(parent: MPath, name: LocalName, lhs: Term, rhs: Term, tp: Term, args: List[(Option[LocalName], Term)], rl: Option[String]) : Law = {  
+     val formula = Formula(MakeQuantityExpressionFromTerm(lhs, args),
+                           MakeQuantityExpressionFromTerm(rhs, args), args)
+     
      val (lawName, ruleNumber) = getRuleNameData(name.toString)
-     Law(parent, LocalName.parse(lawName), formula, getRule(formula, ruleNumber, args), rl != Some("Condition"))
+     
+     // TODO: ensure that further possible rules are generated from additional rules as well
+     if (ruleNumber != None)
+       Law(parent, LocalName.parse(lawName), formula, getRule(formula, ruleNumber, args), rl != Some("Condition"))
+     else
+       Law(parent, LocalName.parse(lawName), formula, List(), rl != Some("Condition"))
+
    }
    
    def getRuleNameData(name: String): (String, Option[Int]) = {
@@ -159,14 +141,19 @@ class MPDTool(controller: Controller) {
                      true, 
                      c.rl != None && c.rl.get.contains("Constant")))    
                  
-               case Univ(1) if c.df != None => /* Univ(ktype) = Univ(1) = type */
-                 c.df.get match {
-                   case construct_underscore_geometry(f) =>
-                     Some(GeometryDecl(c.parent, c.name, f))
-                   case make_underscore_discrete_underscore_geometry(t) =>
-                     None
-                   case _ => throw new GeneralError("Undefined definition to oftype object: " + c.df.get.toString)
+               case Univ(1) => {/* Univ(ktype) = Univ(1) = type */
+                 if (c.df != None) {
+                   c.df.get match {
+                     case construct_underscore_geometry(f) =>
+                       Some(GeometryDecl(c.parent, c.name, Some(GConstructionFromDescription("Temp"))))
+                     case make_underscore_discrete_underscore_geometry(t) =>
+                       None
+                     case _ => throw new GeneralError("Undefined definition to oftype object: " + c.df.get.toString)
+                   }
+                 } else {
+                   Some(GeometryDecl(c.parent, c.name, None))
                  }
+               }
                
                case sequence_underscore_type(make_underscore_discrete(args)) =>                 
                  Some(QuantitySequenceDecl(args._5.toMPath.^, args._5.toMPath.toGlobalName.name))

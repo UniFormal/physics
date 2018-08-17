@@ -13,86 +13,16 @@ import Units.GeometryBase._
 import Units.BoundaryConditionBase._
 import Units.TacticBase._
 
+import uniformal.physics.Quantities._
+import uniformal.physics.Geometries._
 
 @deprecated("use QElement instead", "")
 case class MQuantity(value: Term, tp:Term, isUniform: Boolean = false, isConstant: Boolean = false) {
-  /* def times(q: MQuantity) = {
-    (tp, q.tp) match {
-       case (Quantity(l1, g1, d1, t1), Quantity(l2, g2, d2, t2)) if l1 == l2 && t1 == t2 => 
-         MQuantity(QuantityMul(d1, d2, g1, g2, l1, t1, value, q.value), 
-             Quantity(l1, GeometryIntersection(g1, g2), DimTimes(d1,d2), t1), false)
-       case _ => throw new GeneralError("Multiplication doesn't make sense for : " + (tp, q.tp))
-    }
-  }
-  
-  def div(q: MQuantity) = {
-    (tp, q.tp) match {
-       case (Quantity(l1, g1, d1, t1), Quantity(l2, g2, d2, t2)) if l1 == l2 && t1 == t2 => 
-         MQuantity(QuantityDiv(d1, d2, g1, g2, l1, t1, value, q.value), 
-             Quantity(l1, GeometryIntersection(g1, g2), DimDiv(d1,d2), t1), false)
-       case _ => throw new GeneralError("Division doesn't make sense for : " + (tp, q.tp))
-    }
-  }
-  
-  def add(q: MQuantity) = {
-    (tp, q.tp) match {
-       case (Quantity(l1, g1, d1, t1), Quantity(l2, g2, d2, t2)) if l1 == l2 && t1 == t2 && d1 == d2 => 
-         MQuantity(QuantityAdd(d1, d2, g1, g2, l1, t1, value, q.value), 
-             Quantity(l1, GeometryIntersection(g1, g2), d1, t1), false)
-       case _ => throw new GeneralError("Addition doesn't make sense for : " + (tp, q.tp))
-    }
-  }
-  
-  def subtract(q: MQuantity) = {
-    (tp, q.tp) match {
-       case (Quantity(l1, g1, d1, t1), Quantity(l2, g2, d2, t2)) if l1 == l2 && t1 == t2 && d1 == d2 => 
-         MQuantity(QuantitySubtract(d1, d2, g1, g2, l1, t1, value, q.value), 
-             Quantity(l1, GeometryIntersection(g1, g2), d1, t1), false)
-       case _ => throw new GeneralError("Subtraction doesn't make sense for : " + (tp, q.tp))
-    }
-  } */
-  
-/*  def exp(q: MQuantity) = {
-    (tp, q.tp) match {
-      case (QE(d), QE(e)) if e == DimNone && d == DimNone => MQuantity(QEExp(value, q.value), QE(d))
-      case _ => throw new GeneralError("Exponentiation doesn't make sense for : " + (tp, q.tp))
-    }
-  }
- */
-  private class Replacer(path: GlobalName, term: Term) extends StatelessTraverser {
-    def traverse(t: Term)(implicit con : Context, state : State) = t match {
-      case OMS(p) if p == path => term
-      case _ => Traverser(this, t)
-    }
-  }
-  
-  def substitute(p: GlobalName, q: MQuantity) = {
-    val vR = (new Replacer(p, q.value)).apply(value, Context.empty)
-    MQuantity(vR, tp)
-  }
-  
-  
-  private class Finder(path: GlobalName) extends StatelessTraverser {
-    var found = false
-    def traverse(t: Term)(implicit con : Context, state : State) = t match {
-      case OMS(p) if p == path => {
-        found = true
-        Traverser(this, t)
-      }
-      case _ =>Traverser(this, t)
-    }
-  }
-  
-  def contains(q: GlobalName) = {
-    var vF = new Finder(q)
-    vF.apply(value, Context.empty)
-    vF.found
-  }
 }
 
-case class Formula(tp: Term, lhs: Term, rhs: Term, args: List[(Option[LocalName], Term)]) {
-  lazy val lhsQuantityExp = new QuantityExpression(lhs, args)
-  lazy val rhsQuantityExp = new QuantityExpression(rhs, args)
+case class Formula(lhs: QStructure, rhs: QStructure, args: List[(Option[LocalName], Term)]) {
+//  lazy val lhsQuantityExp = MakeQuantityExpressionFromTerm(lhs, args)
+//  lazy val rhsQuantityExp = MakeQuantityExpressionFromTerm(rhs, args)
 }
 
 
@@ -103,7 +33,9 @@ case class QuantitySpaceDecl(parent: MPath, name: LocalName) extends MPDComponen
   def path = parent?name
 }
 
-case class GeometryDecl(parent: MPath, name: LocalName, domain: Term) extends MPDComponent
+case class GeometryDef(parent: MPath, name: LocalName, domain: GStructure) extends MPDComponent
+
+case class GeometryDecl(parent: MPath, name: LocalName, defin: Option[GStructure]) extends MPDComponent
 
 case class IntegrationSurfaceDecl(parent: MPath, name: LocalName) extends MPDComponent
 
@@ -117,19 +49,18 @@ case class QuantitySequenceDecl(quantityParent: MPath, quantityName: LocalName) 
 
 case class QuantityDecl(parent: MPath, name: LocalName, l: Term, geom: Option[Term] , dim: Term, tensRank: List[Int], df: Option[MQuantity], isDiscreteSequence: Boolean, isField: Boolean, isConstant: Boolean) extends MPDComponent with MPDNode {
   def path = parent ? name // '?' forms global name
-  //def toQuantity = MQuantity(OMS(path), Quantity(l, geom, dim, tens), isUniform, isConstant)
   def toQSymbol = QSymbol(name.toString, path)
 }
 
 // A rule is an equation solved for a variable
-case class Rule(solved: QSymbol, solution: QElement, ruleNumber: Option[Int])
+case class Rule(solved: QSymbol, solution: QStructure, ruleNumber: Option[Int])
 
 // A law is a named container of all rules of an equation/formula
 case class Law(parent: MPath, name: LocalName, formula: Formula, additionalRules: List[Rule], isComputational: Boolean = true) extends MPDComponent with MPDNode{
   def path = parent ? name
 
   lazy val generatedRules: List[Rule] = {  
-    def generateRules(lhs: QElement, rhs: QElement): List[(QElement, QElement)] ={
+    def generateRules(lhs: QStructure, rhs: QStructure): List[(QStructure, QStructure)] ={
       lhs match {
         case QAdd(x, y) => generateRules(x, QSubtract(rhs, y)) ++ generateRules(y, QSubtract(rhs, x))
         case QSubtract(x, y) => generateRules(x, QAdd(rhs, y)) ++ generateRules(y, QSubtract(rhs, x))
@@ -141,7 +72,7 @@ case class Law(parent: MPath, name: LocalName, formula: Formula, additionalRules
         case _ => (lhs, rhs)::Nil
       }
     }
-    (generateRules(formula.lhsQuantityExp.expr, formula.rhsQuantityExp.expr) ++ generateRules(formula.rhsQuantityExp.expr, formula.lhsQuantityExp.expr))
+    (generateRules(formula.lhs, formula.rhs) ++ generateRules(formula.rhs, formula.lhs))
                  .filter(x => x._1.isInstanceOf[QSymbol] || x._2.isInstanceOf[QSymbol])
                  .map(x => if (x._1.isInstanceOf[QSymbol]) x else (x._2, x._1))
                  .distinct
@@ -150,13 +81,13 @@ case class Law(parent: MPath, name: LocalName, formula: Formula, additionalRules
   
   lazy val rules = (additionalRules ++ generatedRules)
   
-  lazy val usedQuantities: List[QSymbol] = (formula.lhsQuantityExp.expr.symbols ++ formula.rhsQuantityExp.expr.symbols).distinct
+  lazy val usedQuantities: List[QSymbol] = (formula.lhs.symbols ++ formula.rhs.symbols).distinct
   
   def uses(quantityGlobalName: GlobalName) = usedQuantities.map(_.path) contains quantityGlobalName  
   
   def isSolvableFor(quantityGlobalName: GlobalName) = allSolvableQuantities.map(_.path) contains quantityGlobalName
   
-  def getSolution(q: GlobalName): Option[QElement] = rules.find(_.solved.path == q).map(_.solution)
+  def getSolution(q: GlobalName): Option[QStructure] = rules.find(_.solved.path == q).map(_.solution)
   
   // a law is functional for a quantity q if it can be expressed in the form q = l(a, b, c, ..) a, b, c, .. != q 
   def isFunctional(q: GlobalName) = getFunctionalRule(q) != None
@@ -215,9 +146,9 @@ case class BigStep(steps: List[Step], path: Option[GlobalName]){
   }._2
   
   def toRule(ruleNumber: Option[Int]): Option[Rule] = {
-    val q: (QSymbol , QElement) = (steps.head.quantityDecl.toQSymbol, steps.head.law.getSolution(steps.head.quantityDecl.path).getOrElse(return None))
-    val t: (QSymbol, QElement) = steps.tail.foldLeft(q) {case (sofar: (QSymbol, QElement), next: Step) =>
-       val s: QElement = next.law.getSolution(next.quantityDecl.path).getOrElse{return None}
+    val q: (QSymbol , QStructure) = (steps.head.quantityDecl.toQSymbol, steps.head.law.getSolution(steps.head.quantityDecl.path).getOrElse(return None))
+    val t: (QSymbol, QStructure) = steps.tail.foldLeft(q) {case (sofar: (QSymbol, QStructure), next: Step) =>
+       val s: QStructure = next.law.getSolution(next.quantityDecl.path).getOrElse{return None}
        (next.quantityDecl.toQSymbol, s.substitute(sofar._1, sofar._2))
     }
     Some(Rule(t._1, t._2, ruleNumber))
