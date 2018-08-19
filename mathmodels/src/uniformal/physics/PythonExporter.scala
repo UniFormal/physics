@@ -101,7 +101,7 @@ class PythonExporter extends Exporter {
   }
     
   private def makeExpressionPyLambda(state: String, value: Term, args: List[(Option[LocalName], Term)]): String = {
-    makeExpressionPyLambda(state, MakeQuantityExpressionFromTerm(value, args))
+    makeExpressionPyLambda(state, MakeQuantityStructureFromTerm(value, args))
   }
   
   private def makeExpressionPyLambda(state: String, expr: QStructure): String =
@@ -127,7 +127,7 @@ class PythonExporter extends Exporter {
     list.mkString("[", " ,", "]")
     
   private def makeConstQuantityExpression(value: Term): String = {
-    makePythonExpression(MakeQuantityExpressionFromTerm(value, List(), true), "")._1
+    makePythonExpression(MakeQuantityStructureFromTerm(value, List(), true), "")._1
   }
     
   private def quantityDeclsPyAttributes(mpd: MPD) = {

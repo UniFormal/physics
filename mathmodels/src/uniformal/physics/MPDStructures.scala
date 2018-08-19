@@ -47,7 +47,7 @@ trait MPDNode
 
 case class QuantitySequenceDecl(quantityParent: MPath, quantityName: LocalName) extends MPDComponent
 
-case class QuantityDecl(parent: MPath, name: LocalName, l: Term, geom: Option[Term] , dim: Term, tensRank: List[Int], df: Option[MQuantity], isDiscreteSequence: Boolean, isField: Boolean, isConstant: Boolean) extends MPDComponent with MPDNode {
+case class QuantityDecl(parent: MPath, name: LocalName, l: Term, geom: Option[GStructure] , dim: Term, tensRank: List[Int], df: Option[MQuantity], isDiscreteSequence: Boolean, isField: Boolean, isConstant: Boolean) extends MPDComponent with MPDNode {
   def path = parent ? name // '?' forms global name
   def toQSymbol = QSymbol(name.toString, path)
 }

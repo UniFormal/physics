@@ -51,9 +51,29 @@ object Geometries {
   case class GComplement(val x: GStructure) extends GStructure
   case class GUnion(val x: GStructure, val y: GStructure) extends GStructure
   case class GIntersection(val x: GStructure, val y: GStructure) extends GStructure
-  case class GSymbol(val x: GStructure) extends GStructure with GElement
+  case class GSymbol(name: String, path: GlobalName) extends GStructure with GElement
   case class GConstructionFromPredicate(val f: BooleanPredicates.BStructure) extends GStructure with GElement
   case class GConstructionFromDescription(val s: String) extends GStructure with GElement
+
+  def MakeGeometryStructureFromTerm(g : Term): GStructure = g match {
+    case GeometryBoundary(g1)  =>
+      GBoundary(MakeGeometryStructureFromTerm(g1))
+      
+    case GeometryComplement(g1)  =>
+      GComplement(MakeGeometryStructureFromTerm(g1))
+      
+    case GeometryUnion(g1, g2)  =>
+      GUnion(MakeGeometryStructureFromTerm(g1), MakeGeometryStructureFromTerm(g2))
+      
+    case GeometryIntersection(g1, g2)  =>
+      GUnion(MakeGeometryStructureFromTerm(g1), MakeGeometryStructureFromTerm(g2))
+      
+    case OMS(path) =>
+      GSymbol(path.name.toString, path)
+      
+    case _ =>   
+      throw new GeneralError("Couldn't match token in geometry expression:" + g.toString())   
+  }  
 }
 
 object Quantities {
@@ -171,101 +191,106 @@ object Quantities {
           get_list_recursive(tens) ++ get_list_recursive(v)
         case append_underscore_tensor_underscore_tensor_underscore_component(lh, lt, t, t2, tens, tens2) =>
           get_list_recursive(tens) ++ get_list_recursive(tens2)
-        case _ => throw new GeneralError("Undefined construct in tensor literal: " + t.toString)
+        case _ => 
+          try {
+            List(t.toString.toDouble.toString)
+          } catch {
+            case _ : Throwable => throw new GeneralError("Undefined construct in tensor literal: " + t.toString)
+          }
       }
     }
     get_list_recursive(v)
   }
   
-  def MakeQuantityExpressionFromTerm(q : Term, args: List[(Option[LocalName], Term)], stateless: Boolean = false): QStructure = q match {
+  def MakeQuantityStructureFromTerm(q : Term, args: List[(Option[LocalName], Term)], stateless: Boolean = false): QStructure = q match {
     case QuantityNeg(d, l, t, v)  => 
-      QNeg(MakeQuantityExpressionFromTerm(v, args)) 
+      QNeg(MakeQuantityStructureFromTerm(v, args)) 
     case FieldNeg(g, d, l, t, v) =>
-      QNeg(MakeQuantityExpressionFromTerm(v, args))
+      QNeg(MakeQuantityStructureFromTerm(v, args))
       
     /* Multiplication */
     case QuantityMul(d1, d2, l, t, v1, v2) =>
-      QMul(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args))
+      QMul(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args))
     case FieldMul(d1, d2, l, t, g1, g2, v1, v2) => 
-      QMul(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args))
+      QMul(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args))
     case QMulF(d1, d2, l, t, g, v1, v2) =>
-      QMul(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args))
+      QMul(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args))
     case FMulQ(d1, d2, l, t, g, v1, v2) =>
-      QMul(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args))
+      QMul(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args))
     case QuantityLScalarMul(d1, d2, l, t, v1, v2) => 
-      QMul(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args)) 
+      QMul(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args)) 
     case QuantityRScalarMul(d1, d2, l, t, v1, v2) => 
-      QMul(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args))
+      QMul(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args))
     case FieldLScalarMul(d1, d2, g1, g2, l, t, v1, v2) => 
-      QMul(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args)) 
+      QMul(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args)) 
     case FieldRScalarMul(d1, d2, g1, g2, l, t, v1, v2) => 
-      QMul(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args))
+      QMul(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args))
     case QLScalarMulF(d1, d2, l, t, g, v1, v2) => 
-      QMul(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args)) 
+      QMul(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args)) 
     case FLScalarMulQ(d1, d2, l, t, g, v1, v2) => 
-      QMul(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args))
+      QMul(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args))
     case QRScalarMulF(d1, d2, l, t, g, v1, v2) => 
-      QMul(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args)) 
+      QMul(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args)) 
     case FRScalarMulQ(d1, d2, l, t, g, v1, v2) => 
-      QMul(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args))
+      QMul(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args))
     
     /* Division */
     case QuantityDiv(d1, d2, l, t, v1, v2) =>
-      QDiv(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args))
+      QDiv(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args))
     case FieldDiv(d1, d2, l, t, g1, g2, v1, v2) => 
-      QDiv(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args))
+      QDiv(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args))
     case QDivF(d1, d2, l, t, g, v1, v2) =>
-      QDiv(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args))
+      QDiv(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args))
     case FDivQ(d1, d2, l, t, g, v1, v2) =>
-      QDiv(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args))
+      QDiv(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args))
     case QuantityLScalarDiv(d1, d2, l, t, v1, v2) => 
-      QDiv(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args)) 
+      QDiv(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args)) 
     case QuantityRScalarDiv(d1, d2, l, t, v1, v2) => 
-      QDiv(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args))
+      QDiv(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args))
     case FieldLScalarDiv(d1, d2, g1, g2, l, t, v1, v2) => 
-      QDiv(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args)) 
+      QDiv(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args)) 
     case FieldRScalarDiv(d1, d2, g1, g2, l, t, v1, v2) => 
-      QDiv(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args))
+      QDiv(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args))
     case QLScalarDivF(d1, d2, l, t, g, v1, v2) => 
-      QDiv(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args)) 
+      QDiv(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args)) 
     case FLScalarDivQ(d1, d2, l, t, g, v1, v2) => 
-      QDiv(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args))
+      QDiv(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args))
     case QRScalarDivF(d1, d2, l, t, g, v1, v2) => 
-      QDiv(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args)) 
+      QDiv(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args)) 
     case FRScalarDivQ(d1, d2, l, t, g, v1, v2) => 
-      QDiv(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args))
+      QDiv(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args))
       
     /* Addition */  
     case QuantityAdd(d, l, t, v1, v2) => 
-      QAdd(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args)) 
+      QAdd(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args)) 
     case FieldAdd(d, l, t, g1, g2, v1, v2) => 
-      QAdd(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args)) 
+      QAdd(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args)) 
     case QAddF(d, l, t, g, v1, v2) => 
-      QAdd(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args)) 
+      QAdd(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args)) 
     case FAddQ(d, l, t, g, v1, v2) => 
-      QAdd(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args)) 
+      QAdd(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args)) 
     
     /* Subtraction */  
     case QuantitySubtract(d, l, t, v1, v2) => 
-      QSubtract(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args)) 
+      QSubtract(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args)) 
     case FieldSubtract(d, l, t, g1, g2, v1, v2) => 
-      QSubtract(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args)) 
+      QSubtract(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args)) 
     case QSubtractF(d, l, t, g, v1, v2) => 
-      QSubtract(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args)) 
+      QSubtract(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args)) 
     case FSubtractQ(d, l, t, g, v1, v2) => 
-      QSubtract(MakeQuantityExpressionFromTerm(v1, args), MakeQuantityExpressionFromTerm(v2, args)) 
+      QSubtract(MakeQuantityStructureFromTerm(v1, args), MakeQuantityStructureFromTerm(v2, args)) 
     
     case QuantityExp(v) =>
-      QExp(MakeQuantityExpressionFromTerm(v, args))
+      QExp(MakeQuantityStructureFromTerm(v, args))
       
     case QuantityLog(v) =>
-      QLog(MakeQuantityExpressionFromTerm(v, args))
+      QLog(MakeQuantityStructureFromTerm(v, args))
       
     case FieldGradient(d, g, v) =>
-      QGradient(MakeQuantityExpressionFromTerm(v, args))
+      QGradient(MakeQuantityStructureFromTerm(v, args))
       
     case FieldDivergence(d, g, n, v) =>
-      QDivergence(MakeQuantityExpressionFromTerm(v, args)) 
+      QDivergence(MakeQuantityStructureFromTerm(v, args)) 
       
     case MakeQuantity(l, d, v, u) =>
       QTensorVal(MakeTensorShapeFromTerm(l), MakeTensorElementsFromTerm(v)) 
@@ -291,6 +316,6 @@ object Quantities {
     case a => // I don't know how to match a literal term and OMLIT doesn't work. Temporarily, we assume everything else is a literal
       QTensorVal(List(), List(a.toString))
     
-    // case t => throw new GeneralError("Couldn't match token in expression:" + t.toString())
+    // case t => throw new GeneralError("Couldn't match token in quantity expression:" + t.toString())
   }
 }  

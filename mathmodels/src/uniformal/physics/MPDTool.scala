@@ -34,7 +34,7 @@ class MPDTool(controller: Controller) {
    
    def toQuantity(value: Term, tp: Term): MQuantity = MQuantity(value, tp)
   
-   def toQStructure(value: Term, args: List[(Option[LocalName], Term)]) = MakeQuantityExpressionFromTerm(value, args)
+   def toQStructure(value: Term, args: List[(Option[LocalName], Term)]) = MakeQuantityStructureFromTerm(value, args)
    
    def getRule(formula: Formula, ruleNumber: Option[Int], args: List[(Option[LocalName], Term)]): List[Rule] = {
          if (!formula.lhs.isInstanceOf[QSymbol])
@@ -56,8 +56,8 @@ class MPDTool(controller: Controller) {
    }
    
    def toEqualityLaw(parent: MPath, name: LocalName, lhs: Term, rhs: Term, tp: Term, args: List[(Option[LocalName], Term)], rl: Option[String]) : Law = {  
-     val formula = Formula(MakeQuantityExpressionFromTerm(lhs, args),
-                           MakeQuantityExpressionFromTerm(rhs, args), args)
+     val formula = Formula(MakeQuantityStructureFromTerm(lhs, args),
+                           MakeQuantityStructureFromTerm(rhs, args), args)
      
      val (lawName, ruleNumber) = getRuleNameData(name.toString)
      
@@ -122,7 +122,14 @@ class MPDTool(controller: Controller) {
    def toMPDComponent(c: Constant): Option[MPDComponent] = {
          c.tp match {
            case None =>
-             throw new GeneralError("No type assigned to MMT constant: " + c)
+             c.df match {
+               case None => None
+               
+               case Some(df) => df match {
+                 case x => throw new GeneralError("Definition encountered: " + df.toString)
+               }
+             }
+             //throw new GeneralError("No type assigned to MMT constant: " + c)
              
            case Some(t) =>
              val FunType(args, ret) = t
@@ -136,7 +143,7 @@ class MPDTool(controller: Controller) {
               
                case Arrow(g, Quantity(l, dim, tens)) => 
                  val df = c.df.map{t => toQuantity(t, ret)}
-                 Some(QuantityDecl(c.parent, c.name, l, Some(g), dim, getTensorRankShape(tens), df,
+                 Some(QuantityDecl(c.parent, c.name, l, Some(MakeGeometryStructureFromTerm(g)), dim, getTensorRankShape(tens), df,
                      false,
                      true, 
                      c.rl != None && c.rl.get.contains("Constant")))    
