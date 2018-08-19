@@ -70,21 +70,6 @@ class PythonExporter extends Exporter {
     }
     s"numpy.array(${form_tensor_recursive(tensorElements, tensorRankDims)})"
   }
-  /*
-  private def makeListFromListTerm(l: Term): List[String] = {
-    def get_list_recursive(t: Term, tail: List[String]) : List[String] = {
-      t match {
-        case tcons(a, x, b) => {
-          a match {
-            case real_underscore_lit(e) => get_list_recursive(b, (makeRealStringFromRealTerm(x))::tail)
-            case nat_underscore_lit(e) => get_list_recursive(b, (x.toString)::tail)
-          }
-        }
-        case nnil(p) => return tail
-      }
-    }
-    get_list_recursive(l, Nil)
-  }*/
   
   private def makeRealStringFromRealTerm(r:Term): String = {
     r match {
@@ -101,7 +86,7 @@ class PythonExporter extends Exporter {
   }
     
   private def makeExpressionPyLambda(state: String, value: Term, args: List[(Option[LocalName], Term)]): String = {
-    makeExpressionPyLambda(state, MakeQuantityExpressionFromTerm(value, args))
+    makeExpressionPyLambda(state, MakeQuantityStructureFromTerm(value, args))
   }
   
   private def makeExpressionPyLambda(state: String, expr: QStructure): String =
@@ -126,8 +111,8 @@ class PythonExporter extends Exporter {
   private def getObjectListPy(list: List[String]): String = 
     list.mkString("[", " ,", "]")
     
-  private def makeConstQuantityExpression(value: Term): String = {
-    makePythonExpression(MakeQuantityExpressionFromTerm(value, List(), true), "")._1
+  private def makeConstQuantityExpression(value: QStructure): String = {
+    makePythonExpression(value, "")._1
   }
     
   private def quantityDeclsPyAttributes(mpd: MPD) = {
@@ -145,7 +130,7 @@ class PythonExporter extends Exporter {
           "tensor_shape" -> s"[${q.tensRank.mkString(",")}]"
       )
       if (q.df != None)
-        (parameters:+("initial_value" -> makeConstQuantityExpression(q.df.get.value))).toMap
+        (parameters:+("initial_value" -> makeConstQuantityExpression(q.df.get))).toMap
       else  
         parameters.toMap
     })

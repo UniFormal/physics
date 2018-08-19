@@ -16,15 +16,7 @@ import Units.TacticBase._
 import uniformal.physics.Quantities._
 import uniformal.physics.Geometries._
 
-@deprecated("use QElement instead", "")
-case class MQuantity(value: Term, tp:Term, isUniform: Boolean = false, isConstant: Boolean = false) {
-}
-
-case class Formula(lhs: QStructure, rhs: QStructure, args: List[(Option[LocalName], Term)]) {
-//  lazy val lhsQuantityExp = MakeQuantityExpressionFromTerm(lhs, args)
-//  lazy val rhsQuantityExp = MakeQuantityExpressionFromTerm(rhs, args)
-}
-
+case class Formula(lhs: QStructure, rhs: QStructure, args: List[(Option[LocalName], Term)])
 
 abstract class MPDComponent
 
@@ -47,7 +39,7 @@ trait MPDNode
 
 case class QuantitySequenceDecl(quantityParent: MPath, quantityName: LocalName) extends MPDComponent
 
-case class QuantityDecl(parent: MPath, name: LocalName, l: Term, geom: Option[Term] , dim: Term, tensRank: List[Int], df: Option[MQuantity], isDiscreteSequence: Boolean, isField: Boolean, isConstant: Boolean) extends MPDComponent with MPDNode {
+case class QuantityDecl(parent: MPath, name: LocalName, l: Term, geom: Option[GStructure] , dim: Term, tensRank: List[Int], df: Option[QStructure], isDiscreteSequence: Boolean, isField: Boolean, isConstant: Boolean) extends MPDComponent with MPDNode {
   def path = parent ? name // '?' forms global name
   def toQSymbol = QSymbol(name.toString, path)
 }
