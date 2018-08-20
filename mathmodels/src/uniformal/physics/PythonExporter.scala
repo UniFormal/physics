@@ -15,6 +15,7 @@ import info.mathhub.lf.MitM.Foundation.NatLiterals._
 
 import uniformal.physics.Quantities._
 import uniformal.physics.Geometries._
+import uniformal.physics.Booleans._
 
 class PythonExporter extends Exporter {
   override val outExt = "py"
@@ -35,7 +36,19 @@ class PythonExporter extends Exporter {
     out
   }
   
-  def makePythonExpression(qElement: QStructure, state: String): (String, List[QSymbol])= {
+  def makePythonBooleanExpression(b: BStructure): String = {
+    b match {
+      case BAnd(x, y) => s"(${makePythonBooleanExpression(x)} and ${makePythonBooleanExpression(y)})"
+      case BOr(x, y) => s"(${makePythonBooleanExpression(x)} or ${makePythonBooleanExpression(y)})"
+      case BEqual(x, y) => s"(${makePythonNumericalExpression(x, "state")._1} == ${makePythonNumericalExpression(y, "state")._1})"
+      case BGreaterThanOrEqual(x, y) => s"(${makePythonNumericalExpression(x, "state")._1} >= ${makePythonNumericalExpression(y, "state")._1})"
+      case BLessThanOrEqual(x, y) => s"(${makePythonNumericalExpression(x, "state")._1} <= ${makePythonNumericalExpression(y, "state")._1})"
+      case t => 
+        throw LocalError("Match error when creating python boolean expression string:" + t)
+    }
+  }
+  
+  def makePythonNumericalExpression(qElement: QStructure, state: String): (String, List[QSymbol])= {
     var params: List[QSymbol] = Nil
     def f(q: QStructure):String = q match {
       case QMul(x, y) => s"(${f(x)} * ${f(y)})"
@@ -48,12 +61,14 @@ class PythonExporter extends Exporter {
       case QGradient(x) => s"gradient(${f(x)}, self.space)"   
       case QDivergence(x) => s"divergence(${f(x)}, self.space)" 
       case QTensorVal(l, lr) => s"${makePyTensor(l, lr)}"
-      case QSymbol(x, _) => {
+      case QAbs(x) => s"numpy.abs(${f(x)})"
+      case QSymbol(x, _, false) => {
         params ::= q.asInstanceOf[QSymbol]
         state + "['" + ensureIdentifierString(x) + "']"
       }
+      case QSymbol(x, _, true) => ensureIdentifierString(x)
       case t => 
-        throw LocalError("Match Error:" + t)
+        throw LocalError("Match error when creating python numerical expression string:" + t)
     }
     (f(qElement), params.distinct)
   }
@@ -90,7 +105,7 @@ class PythonExporter extends Exporter {
   }
   
   private def makeExpressionPyLambda(state: String, expr: QStructure): String =
-        s"lambda $state: ${makePythonExpression(expr, state)._1}"
+        s"lambda $state: ${makePythonNumericalExpression(expr, state)._1}"
 
   
   private def makeFunctionalGraphPy(mpd: MPD): String = {
@@ -112,7 +127,7 @@ class PythonExporter extends Exporter {
     list.mkString("[", " ,", "]")
     
   private def makeConstQuantityExpression(value: QStructure): String = {
-    makePythonExpression(value, "")._1
+    makePythonNumericalExpression(value, "")._1
   }
     
   private def quantityDeclsPyAttributes(mpd: MPD) = {
@@ -138,8 +153,8 @@ class PythonExporter extends Exporter {
     
   private def lawsPyAttributes(mpd: MPD) = 
     mpd.laws.map(l => {
-      val (lhsStr, lhsParams) = makePythonExpression(l.formula.lhs, "state")
-      val (rhsStr, rhsParams) = makePythonExpression(l.formula.rhs, "state")
+      val (lhsStr, lhsParams) = makePythonNumericalExpression(l.formula.lhs, "state")
+      val (rhsStr, rhsParams) = makePythonNumericalExpression(l.formula.rhs, "state")
       val out = Map(
           "name" -> s"'${l.name.toString}'",
           "parent" -> s"'${l.parent.toString}'",
@@ -156,7 +171,7 @@ class PythonExporter extends Exporter {
   private def computationStepsPyAttributes(mpd: MPD) = 
     mpd.computationSteps.map(bstp => {
       val substepsLambdas = bstp.steps.map(stp => {
-          val (stpStr, params) = makePythonExpression(stp.toRule(None).get.solution, "state")
+          val (stpStr, params) = makePythonNumericalExpression(stp.toRule(None).get.solution, "state")
           s"lambda state: (${stpStr})"
         }
       ).mkString("[", ",", "]")
@@ -164,7 +179,7 @@ class PythonExporter extends Exporter {
         s"('${stp.law.name.toString}', '${stp.quantityDecl.name.toString}')"
       ).mkString("[", ",", "]")
       val stpExpression = bstp.toRule(None).get.solution
-      val (stpStr, params) = makePythonExpression(stpExpression, "state")
+      val (stpStr, params) = makePythonNumericalExpression(stpExpression, "state")
       val parent = bstp.path.get.toPath
       val name = bstp.path.get.last
       Map(

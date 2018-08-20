@@ -21,15 +21,43 @@ import info.mathhub.lf.MitM.Foundation.Tensors._
 import info.mathhub.lf.MitM.Foundation.RealLiterals._
 import info.mathhub.lf.MitM.Foundation.NatLiterals._
 
-object BooleanPredicates {
+object Booleans {
   abstract class BStructure
   
   case class BNot(val x: BStructure) extends BStructure
   case class BAnd(val x: BStructure, val y: BStructure) extends BStructure
   case class BOr(val x: BStructure, val y: BStructure) extends BStructure
   case class BEqual(val x: Quantities.QStructure, val y: Quantities.QStructure) extends BStructure
-  case class BGreaterThan(val x: Quantities.QStructure, val y: Quantities.QStructure) extends BStructure
-  case class BSmallerThan(val x: Quantities.QStructure, val y: Quantities.QStructure) extends BStructure
+  case class BGreaterThanOrEqual(val x: Quantities.QStructure, val y: Quantities.QStructure) extends BStructure
+  case class BLessThanOrEqual(val x: Quantities.QStructure, val y: Quantities.QStructure) extends BStructure
+  
+  def MakeBooleanStructureFromTerm(p : Term, args: List[(Option[LocalName], Term)] = Nil): BStructure = p match {
+    case Logic.and(x, y) =>
+      BAnd(MakeBooleanStructureFromTerm(x), 
+           MakeBooleanStructureFromTerm(y))
+           
+    case Logic.or(x, y) =>
+      BOr(MakeBooleanStructureFromTerm(x), 
+           MakeBooleanStructureFromTerm(y))
+  
+    case Logic._eq(t, x, y) => 
+      BEqual(Quantities.MakeQuantityStructureFromTerm(x, args), 
+             Quantities.MakeQuantityStructureFromTerm(y, args))
+             
+    case leq_underscore_real_underscore_lit(x, y) =>
+      BLessThanOrEqual(Quantities.MakeQuantityStructureFromTerm(x, args),
+                       Quantities.MakeQuantityStructureFromTerm(y, args))
+                
+    case Logic.neq(t, x, y) =>
+      BNot(BEqual(Quantities.MakeQuantityStructureFromTerm(x, args), 
+                  Quantities.MakeQuantityStructureFromTerm(y, args)))
+                  
+    case Logic.not(x) =>
+      BNot(MakeBooleanStructureFromTerm(x))
+      
+    case _ =>   
+      throw new GeneralError("Couldn't match token in predicate expression:" + p.toString())
+  }
 }
 
 object ComputationalSteps {
@@ -52,7 +80,7 @@ object Geometries {
   case class GUnion(val x: GStructure, val y: GStructure) extends GStructure
   case class GIntersection(val x: GStructure, val y: GStructure) extends GStructure
   case class GSymbol(name: String, path: GlobalName) extends GStructure with GElement
-  case class GConstructionFromPredicate(val f: BooleanPredicates.BStructure) extends GStructure with GElement
+  case class GConstructionFromPredicate(val f: Booleans.BStructure, val args: List[(LocalName, Term)]) extends GStructure with GElement
   case class GConstructionFromDescription(val s: String) extends GStructure with GElement
 
   def MakeGeometryStructureFromTerm(g : Term): GStructure = g match {
@@ -86,7 +114,7 @@ object Quantities {
         case x if x == e => true
         case x: QTwoForm => x.y.contains(e) || x.x.contains(e)
         case x: QOneForm => x.x.contains(e)
-        case QSymbol(_, p) => false
+        case QSymbol(_, p, false) => false
         case QTensorVal(_, _) => false
         case _ => throw new GeneralError("Undefined construction in search of QStructure")
       }
@@ -94,7 +122,7 @@ object Quantities {
     
     def substitute(p: QSymbol, e: QStructure) : QStructure = {
       this match {
-        case QSymbol(n, h) => if (h == p.path) e else QSymbol(n, h)
+        case QSymbol(n, h, false) => if (h == p.path) e else QSymbol(n, h)
         case QMul(x, y) => QMul(x.substitute(p, e), y.substitute(p, e))
         case QDiv(x, y) => QDiv(x.substitute(p, e), y.substitute(p, e))
         case QAdd(x, y) => QAdd(x.substitute(p, e), y.substitute(p, e))
@@ -113,7 +141,7 @@ object Quantities {
       this match {
         case x: QTwoForm => x.y.symbols ++ x.x.symbols
         case x: QOneForm => x.x.symbols
-        case QSymbol(_, p) => this.asInstanceOf[QSymbol]::Nil
+        case QSymbol(_, p, false) => this.asInstanceOf[QSymbol]::Nil
         case QTensorVal(a, b) => Nil
         case _ => throw new GeneralError("Undefined construction in search of symbols: " + this.toString)
       }
@@ -136,11 +164,12 @@ object Quantities {
   case class QAdd(override val x: QStructure, override val y: QStructure) extends QStructure with QTwoForm
   case class QSubtract(override val x: QStructure, override val y: QStructure) extends QStructure with QTwoForm
   case class QNeg(override val x: QStructure) extends QStructure with QOneForm
+  case class QAbs(override val x: QStructure) extends QStructure with QOneForm
   case class QExp(override val x: QStructure) extends QStructure with QOneForm
   case class QLog(override val x: QStructure) extends QStructure with QOneForm
   case class QGradient(override val x: QStructure) extends QStructure with QOneForm
   case class QDivergence(override val x: QStructure) extends QStructure with QOneForm
-  case class QSymbol(name: String, path: GlobalName) extends QStructure with QElement
+  case class QSymbol(name: String, path: GlobalName, isArg: Boolean = false) extends QStructure with QElement
   case class QAtSpacePoint(spacePoint: QStructure, field: QStructure) extends QStructure with QElement
   // case class QFieldSequence(index: QElement, 
   case class QTensorVal(shape: List[Int], elems: List[String]) extends QStructure
@@ -295,11 +324,20 @@ object Quantities {
     case MakeQuantity(l, d, v, u) =>
       QTensorVal(MakeTensorShapeFromTerm(l), MakeTensorElementsFromTerm(v)) 
     case MakeQuantityScalar(d, v, u) =>
-      QTensorVal(List(), MakeTensorElementsFromTerm(v)) 
+      QTensorVal(Nil, MakeTensorElementsFromTerm(v)) 
+  
+    case StripTensorFromQuantity(l, d, t, v) =>
+      MakeQuantityStructureFromTerm(v, args)
+      
+    case get_underscore_vector_underscore_component(h, v, index) =>
+      QGetTensorComponent(MakeQuantityStructureFromTerm(v, args), MakeQuantityStructureFromTerm(index, args))
+    
+    case real_underscore_abs(r) =>
+      QAbs(MakeQuantityStructureFromTerm(r, args))
       
     // Ugly use of reflection
     case r if r.getClass().getName().contains("RealLiterals") =>
-      QTensorVal(List(), List(MakeRealStringFromRealTerm(r)))
+      QTensorVal(Nil, List(MakeRealStringFromRealTerm(r)))
       
     case OMS(path) => {
       if (stateless)
@@ -314,8 +352,10 @@ object Quantities {
       
       
     case a => // I don't know how to match a literal term and OMLIT doesn't work. Temporarily, we assume everything else is a literal
-      QTensorVal(List(), List(a.toString))
+      QTensorVal(Nil, List(a.toString))
     
     // case t => throw new GeneralError("Couldn't match token in quantity expression:" + t.toString())
   }
 }  
+
+

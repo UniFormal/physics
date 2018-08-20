@@ -30,6 +30,7 @@ import uniformal.physics.Quantities._
 import uniformal.physics.Geometries._
 
 class MPDTool(controller: Controller) {
+  
   val ruleRegex = """^([\p{L}_]+)?(_rule(\d+))?$""".r
    
    def getRule(formula: Formula, ruleNumber: Option[Int], args: List[(Option[LocalName], Term)]): List[Rule] = {
@@ -61,8 +62,8 @@ class MPDTool(controller: Controller) {
      if (ruleNumber != None)
        Law(parent, LocalName.parse(lawName), formula, getRule(formula, ruleNumber, args), rl != Some("Condition"))
      else
-       Law(parent, LocalName.parse(lawName), formula, List(), rl != Some("Condition"))
-
+       Law(parent, LocalName.parse(lawName), formula, Nil, rl != Some("Condition"))
+  
    }
    
    def getRuleNameData(name: String): (String, Option[Int]) = {
@@ -97,7 +98,7 @@ class MPDTool(controller: Controller) {
        case tensor_underscore_type(l) => {
          makeListFromListTerm(l).map(n => n.toInt)
        }
-       case Tensors.Scalar(l) => List()
+       case Tensors.Scalar(l) => Nil
        case Tensors.Vector(i) => List(i.toString.toInt)
        case Tensors.Matrix(j,k) => List(j.toString.toInt, k.toString.toInt)
        case _ => throw new GeneralError("Can't recognize tensor type: " + tensorType.toString)
@@ -107,10 +108,10 @@ class MPDTool(controller: Controller) {
    def toRuleComponent(c: Constant, x: Term, args: List[(Option[LocalName], Term)]) = {
      x match {
        case Logic._eq(tp, lhs, rhs) if c.rl.get.contains("Law") => {
-         Some(toEqualityLaw(c.parent, c.name, lhs, rhs, tp, args, c.rl))
-       }
-       //case x if c.rl.get.contains("ComputationStep") => 
-       //  throw new GeneralError(args)
+       Some(toEqualityLaw(c.parent, c.name, lhs, rhs, tp, args, c.rl))
+     }
+     //case x if c.rl.get.contains("ComputationStep") => 
+     //  throw new GeneralError(args)
        case _ => None
      }
    }
@@ -123,72 +124,86 @@ class MPDTool(controller: Controller) {
                
                case Some(df) => df match {
                  case x => throw new GeneralError("Definition encountered: " + df.toString)
+             }
+           }
+           //throw new GeneralError("No type assigned to MMT constant: " + c)
+           
+         case Some(t) =>
+           val FunType(args, ret) = t
+           ret match {
+             case Quantity(l, dim, tens) =>
+               val df = c.df.map{v => MakeQuantityStructureFromTerm(v, args, true)}
+               Some(QuantityDecl(c.parent, c.name, l, None, dim, getTensorRankShape(tens), df,
+                   false,
+                   false, 
+                   c.rl != None && c.rl.get.contains("Constant")))
+            
+             case Arrow(g, Quantity(l, dim, tens)) => 
+               val df = c.df.map{v => MakeQuantityStructureFromTerm(v, args, true)}
+               Some(QuantityDecl(c.parent, c.name, l, Some(MakeGeometryStructureFromTerm(g)), dim, getTensorRankShape(tens), df,
+                   false,
+                   true, 
+                   c.rl != None && c.rl.get.contains("Constant")))    
+               
+             case Univ(1) => {/* Univ(ktype) = Univ(1) = type */
+               if (c.df != None) {
+                 c.df.get match {
+                   case construct_underscore_geometry(f) =>
+                     f match {
+                       case geometry_underscore_description(s) =>
+                         Some(GeometryDecl(c.parent, c.name, Some(GConstructionFromDescription(s.toString))))
+                     
+                       case FunTerm(pargs, body) => 
+                         //throw new GeneralError("Error " + Booleans.MakeBooleanStructureFromTerm(body, pargs.map(x => (Some(x._1), x._2))))
+                         Some(GeometryDecl(c.parent, c.name, 
+                                           Some(GConstructionFromPredicate(Booleans.MakeBooleanStructureFromTerm(body, pargs.map(x => (Some(x._1), x._2))), pargs))
+                                          ))
+                       case _ =>
+                         throw new GeneralError("Unidentified token for geometry construction: " + f.toString())
+
+                     }
+                     
+                   case make_underscore_discrete_underscore_geometry(t) =>
+                     None
+                     
+                   case _ => throw new GeneralError("Undefined definition to oftype object: " + c.df.get.toString)
+                 }
+               } else {
+                 Some(GeometryDecl(c.parent, c.name, None))
                }
              }
-             //throw new GeneralError("No type assigned to MMT constant: " + c)
              
-           case Some(t) =>
-             val FunType(args, ret) = t
-             ret match {
-               case Quantity(l, dim, tens) =>
-                 val df = c.df.map{v => MakeQuantityStructureFromTerm(v, args, true)}
-                 Some(QuantityDecl(c.parent, c.name, l, None, dim, getTensorRankShape(tens), df,
-                     false,
-                     false, 
-                     c.rl != None && c.rl.get.contains("Constant")))
-              
-               case Arrow(g, Quantity(l, dim, tens)) => 
-                 val df = c.df.map{v => MakeQuantityStructureFromTerm(v, args, true)}
-                 Some(QuantityDecl(c.parent, c.name, l, Some(MakeGeometryStructureFromTerm(g)), dim, getTensorRankShape(tens), df,
-                     false,
-                     true, 
-                     c.rl != None && c.rl.get.contains("Constant")))    
-                 
-               case Univ(1) => {/* Univ(ktype) = Univ(1) = type */
-                 if (c.df != None) {
-                   c.df.get match {
-                     case construct_underscore_geometry(f) =>
-                       Some(GeometryDecl(c.parent, c.name, Some(GConstructionFromDescription("Temp"))))
-                     case make_underscore_discrete_underscore_geometry(t) =>
-                       None
-                     case _ => throw new GeneralError("Undefined definition to oftype object: " + c.df.get.toString)
-                   }
-                 } else {
-                   Some(GeometryDecl(c.parent, c.name, None))
+             case sequence_underscore_type(make_underscore_discrete(args)) =>                 
+               Some(QuantitySequenceDecl(args._5.toMPath.^, args._5.toMPath.toGlobalName.name))
+             
+             case make_underscore_discrete(args) =>
+               None
+               
+             case subtypeJudg(t1, t2) =>
+               None
+               
+             case Logic.ded(x) =>
+               x match {
+                 case Logic._eq(tp, lhs, rhs) if c.rl.get.contains("Law") => {
+                   Some(toEqualityLaw(c.parent, c.name, lhs, rhs, tp, args, c.rl))
                  }
+                 case x if c.rl.get.contains("ComputationStep") => 
+                   throw new GeneralError(args.toString())
+                 case _ => None
                }
                
-               case sequence_underscore_type(make_underscore_discrete(args)) =>                 
-                 Some(QuantitySequenceDecl(args._5.toMPath.^, args._5.toMPath.toGlobalName.name))
+             case Pi(name, tp, body) =>
+               throw new GeneralError("hodgepodge")
                
-               case make_underscore_discrete(args) =>
-                 None
-                 
-               case subtypeJudg(t1, t2) =>
-                 None
-                 
-               case Logic.ded(x) =>
-                 x match {
-                   case Logic._eq(tp, lhs, rhs) if c.rl.get.contains("Law") => {
-                     Some(toEqualityLaw(c.parent, c.name, lhs, rhs, tp, args, c.rl))
-                   }
-                   case x if c.rl.get.contains("ComputationStep") => 
-                     throw new GeneralError(args.toString())
-                   case _ => None
-                 }
-                 
-               case Pi(name, tp, body) =>
-                 throw new GeneralError("hodgepodge")
-                 
-               case Dirichlet(l, g, d, t, q, b) =>
-                 println(g)
-                 None
-                 
-              // case GetStepType(a) =>
-              //   Some(toStepDecl(c.parent, c.name, a))
-                 
-               case d =>
-                 throw new GeneralError("Unknown construction of MPD component: " + c.name.toString + "..." +  d.toString())
+             case Dirichlet(l, g, d, t, q, b) =>
+               println(g)
+               None
+               
+            // case GetStepType(a) =>
+            //   Some(toStepDecl(c.parent, c.name, a))
+               
+             case d =>
+               throw new GeneralError("Unknown construction of MPD component: " + c.name.toString + "..." +  d.toString())
              }
          }
    }

@@ -44,6 +44,9 @@ class MPDBase(object):
 	def init_quantity_decls(self):
 		pass
 
+        def init_geometries(self):
+                pass
+        
 	def init_computation_steps(self):
 		pass
 
@@ -120,9 +123,17 @@ class MPDBase(object):
 
 
 class Geometry:
-	def __init__(self, name, parent):
-		pass
-		
+	def __init__(self, **kwargs):
+                self.name = kwargs["name"]
+                self.parent = kwargs["parent"]
+		self.geometry_mask_predicate = kwargs["geometry_mask_predicate"]
+                self.mask = self.geometry_mask_predicate(kwargs["ambient_space_grid"])
+                
+        def __str__(self):
+                s = "name: " + self.name + '\n'
+		s += "parent: " + self.parent + '\n'
+		return s
+
 class ComputationStep:
 	def __init__(self, **kwargs):
 		self.name = kwargs["name"]
