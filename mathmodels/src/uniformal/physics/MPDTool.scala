@@ -240,8 +240,6 @@ class MPDTool(controller: Controller) {
      
      var laws: List[Law] = Nil
      var quantityDecls: List[QuantityDecl] = Nil
-     var integrationSurfaces: List[IntegrationSurfaceDecl] = Nil
-     var spaces: List[QuantitySpaceDecl] = Nil
      var geometryDecls: List[GeometryDecl] = Nil
      var computationSteps: List[BigStep] = Nil
      
@@ -282,13 +280,7 @@ class MPDTool(controller: Controller) {
          }
          
          case geom if geom.isInstanceOf[GeometryDecl] => geometryDecls ::= geom.asInstanceOf[GeometryDecl]
-         case surface if surface.isInstanceOf[IntegrationSurfaceDecl] =>
-           integrationSurfaces ::= surface.asInstanceOf[IntegrationSurfaceDecl]
          
-         // should deal with once I manage how to make fields with different spaces work in MMT
-         case space if space.isInstanceOf[QuantitySpaceDecl] => 
-           spaces ::= space.asInstanceOf[QuantitySpaceDecl]
-           
          case seq if seq.isInstanceOf[QuantitySequenceDecl] =>
            val newSeq = seq.asInstanceOf[QuantitySequenceDecl]
            val quantitySeqIndex = quantityDecls.indexWhere(x => (x.parent ? x.name) == (newSeq.quantityParent ? newSeq.quantityName))
@@ -309,6 +301,6 @@ class MPDTool(controller: Controller) {
          case _ => throw new GeneralError("MPD component not handled")
        }
      }
-     Some(MPD(thy.parent, thy.name, quantityDecls, laws, computationSteps, integrationSurfaces, spaces))
+     Some(MPD(thy.parent, thy.name, quantityDecls, laws, computationSteps, geometryDecls))
    }
 }

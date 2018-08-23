@@ -48,6 +48,15 @@ class PythonExporter extends Exporter {
     }
   }
   
+  def makePyRString(rComponent: RComponent): String = rComponent match {
+    case RTimes(x, y) => s"(${makePyRString(x)} * ${makePyRString(y)})"
+    case RTimes10ToThePower(x, y) => s"(${makePyRString(x)} * (10.0 ** ${makePyRString(y)}))"
+    case RNeg(x) => s"(-${makePyRString(x)})"
+    case QTensorRealString(x) => x
+    case QSymbol(name, _, _) => ensureIdentifierString(name)
+    case _ => throw LocalError("Match error when creating python numerical expression string for tensor component:" + rComponent.toString)
+  }
+  
   def makePythonNumericalExpression(qElement: QStructure, state: String): (String, List[QSymbol])= {
     var params: List[QSymbol] = Nil
     def f(q: QStructure):String = q match {
@@ -58,9 +67,9 @@ class PythonExporter extends Exporter {
       case QNeg(x) => s"(- ${f(x)})"
       case QExp(x) => s"numpy.exp(${f(x)})"
       case QLog(x) => s"numpy.log(${f(x)})"
-      case QGradient(x) => s"gradient(${f(x)}, self.space)"   
-      case QDivergence(x) => s"divergence(${f(x)}, self.space)" 
-      case QTensorVal(l, lr) => s"${makePyTensor(l, lr)}"
+      case QGradient(x) => s"gradient(${f(x)}, self.ambient_space_grid)"   
+      case QDivergence(x) => s"divergence(${f(x)}, self.ambient_space_grid)" 
+      case QTensorVal(l, lr) => s"${makePyTensor(l, lr.map(makePyRString(_)))}"
       case QAbs(x) => s"numpy.abs(${f(x)})"
       case QSymbol(x, _, false) => {
         params ::= q.asInstanceOf[QSymbol]
@@ -193,6 +202,35 @@ class PythonExporter extends Exporter {
           "is_cyclic" -> {if (bstp.cyclic) "True" else "False"},
           "is_connected" -> {if (bstp.isConnected) "True" else "False"})
     })
+    
+  private def geometriesPyAttributes(mpd: MPD) = 
+    mpd.geometryDecls.map(geom => {
+      var hasConstruction = true
+      var descriptionString: String = ""
+      var geomLambda: Option[String] = None
+      var geomLambdaArgs: Option[String] = None
+      geom.defin match {
+        case Some(Geometries.GConstructionFromPredicate(pred, args)) => {
+          geomLambda = Some(makePythonBooleanExpression(pred))
+          assert(args.size == 1)
+          geomLambdaArgs = Some(ensureIdentifierString(args(0)._1.toString))
+        }
+        case Some(Geometries.GConstructionFromDescription(s)) => {
+          hasConstruction = false
+          descriptionString = s
+        }
+        case None => throw new GeneralError("Geometry lacks a definition or a description: " + geom.path.toString)
+      }
+      val parent = geom.path.toPath
+      val name = geom.path.last
+      Map(
+          "name" -> s"'${name.toString}'",
+          "parent" -> s"'${parent.toString}'",
+          "has_construction" -> {if (hasConstruction) "True" else "False"},
+          "description_string" -> s"'${descriptionString}'",
+          "geometry_mask_predicate" -> s"lambda ${geomLambdaArgs}: (${geomLambda})",
+          "ambient_space_grid" -> s"self.ambient_space_grid")
+    })
   
   def pyObjectAssignment(lhs: String, objname: String, attrs: Map[String, String], currentIndentLevel: Int): String = {
     s"""$lhs = $objname(
@@ -224,6 +262,12 @@ ${pyIndent(2)}pass
 ${pyIndent(1)}def init_laws(self):
 ${pyIndent(2)}${lawsPyAttributes(mpd).map{
   mp => pyObjectAssignment(s"self.laws[${mp("name")}]", "Law", mp, 2)}.mkString("\n\n"+pyIndent(2))
+}
+${pyIndent(2)}pass
+
+${pyIndent(1)}def init_geometries(self):
+${pyIndent(2)}${geometriesPyAttributes(mpd).map{
+  mp => pyObjectAssignment(s"self.geometries[${mp("name")}]", "Geometry", mp, 2)}.mkString("\n\n"+pyIndent(2))
 }
 ${pyIndent(2)}pass
 

@@ -9,7 +9,7 @@ class MPDBase(object):
 		self.name = name
 		self.parent = parent
 
-		self.space = space
+		self.ambient_space_grid = space
 		self.surface_integrators = surface_integrators
 
 		self.quantity_decls = {}
@@ -31,6 +31,9 @@ class MPDBase(object):
 		self.laws = {}
 		self.init_laws()
 
+		self.geometries = {}
+		self.init_geometries()
+
 		self.computation_steps = {}
 		self.init_computation_steps()
 
@@ -44,9 +47,9 @@ class MPDBase(object):
 	def init_quantity_decls(self):
 		pass
 
-        def init_geometries(self):
-                pass
-        
+	def init_geometries(self):
+		pass
+	
 	def init_computation_steps(self):
 		pass
 
@@ -124,13 +127,15 @@ class MPDBase(object):
 
 class Geometry:
 	def __init__(self, **kwargs):
-                self.name = kwargs["name"]
-                self.parent = kwargs["parent"]
+		self.name = kwargs["name"]
+		self.parent = kwargs["parent"]
 		self.geometry_mask_predicate = kwargs["geometry_mask_predicate"]
-                self.mask = self.geometry_mask_predicate(kwargs["ambient_space_grid"])
-                
-        def __str__(self):
-                s = "name: " + self.name + '\n'
+		self.description_string = kwargs["description_string"]
+		self.has_construction = kwargs["has_construction"]
+		self.mask = self.geometry_mask_predicate(kwargs["ambient_space_grid"])
+		
+	def __str__(self):
+		s = "name: " + self.name + '\n'
 		s += "parent: " + self.parent + '\n'
 		return s
 
@@ -149,8 +154,8 @@ class ComputationStep:
 	def __str__(self):
 		s = "name: " + self.name + '\n'
 		s += "parent: " + self.parent + '\n'
-		s += "steps: " + str(" <~~ ".join(map(lambda s: " <- ".join(s), self.law_quantity_name_pairs)))
 		return s
+		s += "steps: " + str(" <~~ ".join(map(lambda s: " <- ".join(s), self.law_quantity_name_pairs)))
 
 	def compute(self, state):
 		return self.compute_lambda(state)

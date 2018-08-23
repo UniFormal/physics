@@ -158,6 +158,7 @@ object Quantities {
   }
   
   trait QElement
+  trait RComponent
   
   case class QMul(override val x: QStructure, override val y: QStructure) extends QStructure with QTwoForm
   case class QDiv(override val x: QStructure, override val y: QStructure) extends QStructure with QTwoForm
@@ -169,12 +170,16 @@ object Quantities {
   case class QLog(override val x: QStructure) extends QStructure with QOneForm
   case class QGradient(override val x: QStructure) extends QStructure with QOneForm
   case class QDivergence(override val x: QStructure) extends QStructure with QOneForm
-  case class QSymbol(name: String, path: GlobalName, isArg: Boolean = false) extends QStructure with QElement
+  case class QSymbol(name: String, path: Option[GlobalName], isArg: Boolean = false) extends QStructure with QElement with RComponent
   case class QAtSpacePoint(spacePoint: QStructure, field: QStructure) extends QStructure with QElement
   // case class QFieldSequence(index: QElement, 
-  case class QTensorVal(shape: List[Int], elems: List[String]) extends QStructure
+  case class QTensorVal(shape: List[Int], elems: List[RComponent]) extends QStructure
   case class QGetTensorComponent(tensor: QStructure, index: QStructure) extends QStructure
   
+  case class QTensorRealString(str : String) extends RComponent
+  case class RTimes(x: RComponent, y: RComponent) extends RComponent
+  case class RTimes10ToThePower(x: RComponent, y: RComponent) extends RComponent
+  case class RNeg(x: RComponent) extends RComponent
   
   private def MakeTensorShapeFromTerm(l: Term): List[Int] = {
     def get_list_recursive(t: Term, tail: List[Int]) : List[Int] = {
@@ -191,27 +196,36 @@ object Quantities {
     get_list_recursive(l, Nil)
   }
   
-  private def MakeRealStringFromRealTerm(r:Term): String = {
+  private def MakeRComponentFromRealTerm(r:Term, args: List[(Option[LocalName], Term)]): RComponent = {
     r match {
       case real_underscore_times_underscore_tenth_underscore_pow(a, b) => 
-        (MakeRealStringFromRealTerm(a).toDouble * scala.math.pow(10.0,
-                       MakeRealStringFromRealTerm(b).toDouble)).toString
+        RTimes10ToThePower(MakeRComponentFromRealTerm(a, args),
+                           MakeRComponentFromRealTerm(b, args))
       case times_underscore_real_underscore_lit(a, b) =>
-        (MakeRealStringFromRealTerm(a).toDouble *
-         MakeRealStringFromRealTerm(b).toDouble).toString
+        RTimes(MakeRComponentFromRealTerm(a, args),
+               MakeRComponentFromRealTerm(b, args))
       case minus_underscore_real_underscore_lit(a) =>
-        (- MakeRealStringFromRealTerm(a).toDouble).toString
-      case a => a.toString
+        RNeg(MakeRComponentFromRealTerm(a, args))
+        
+      case real_underscore_lit(_) => throw new GeneralError("Undefined")
+        
+      case a => {
+        try {
+          QTensorRealString(a.toString.toDouble.toString)
+        } catch {
+          case _ : Throwable => QSymbol(a.toString, None, false)//throw new GeneralError("Undefined construct in tensor literal: " + a.toString)
+        }
+      }
     }
   }
   
   
-  private def MakeTensorElementsFromTerm(v : Term) : List[String] ={
-    def get_list_recursive(t: Term) : List[String] = {
+  private def MakeTensorElementsFromTerm(v : Term, args: List[(Option[LocalName], Term)]) : List[RComponent] ={
+    def get_list_recursive(t: Term) : List[RComponent] = {
       t match {
         case r if r.getClass().getName().contains("RealLiterals") => 
-          MakeRealStringFromRealTerm(t)::Nil
-        case nat_underscore_lit(_) => t.toString::Nil
+          MakeRComponentFromRealTerm(t, args)::Nil
+        //case nat_underscore_lit(_) => t.toString::Nil
         case start_underscore_tensor_underscore_from_underscore_number(v) => 
           get_list_recursive(v)
         case start_underscore_tensor_underscore_from_underscore_tensor(l, t, v) =>
@@ -221,11 +235,7 @@ object Quantities {
         case append_underscore_tensor_underscore_tensor_underscore_component(lh, lt, t, t2, tens, tens2) =>
           get_list_recursive(tens) ++ get_list_recursive(tens2)
         case _ => 
-          try {
-            List(t.toString.toDouble.toString)
-          } catch {
-            case _ : Throwable => throw new GeneralError("Undefined construct in tensor literal: " + t.toString)
-          }
+          List(MakeRComponentFromRealTerm(t, args))
       }
     }
     get_list_recursive(v)
@@ -322,9 +332,9 @@ object Quantities {
       QDivergence(MakeQuantityStructureFromTerm(v, args)) 
       
     case MakeQuantity(l, d, v, u) =>
-      QTensorVal(MakeTensorShapeFromTerm(l), MakeTensorElementsFromTerm(v)) 
+      QTensorVal(MakeTensorShapeFromTerm(l), MakeTensorElementsFromTerm(v, args)) 
     case MakeQuantityScalar(d, v, u) =>
-      QTensorVal(Nil, MakeTensorElementsFromTerm(v)) 
+      QTensorVal(Nil, MakeTensorElementsFromTerm(v, args)) 
   
     case StripTensorFromQuantity(l, d, t, v) =>
       MakeQuantityStructureFromTerm(v, args)
@@ -335,15 +345,15 @@ object Quantities {
     case real_underscore_abs(r) =>
       QAbs(MakeQuantityStructureFromTerm(r, args))
       
-    // Ugly use of reflection
-    case r if r.getClass().getName().contains("RealLiterals") =>
-      QTensorVal(Nil, List(MakeRealStringFromRealTerm(r)))
-      
     case OMS(path) => {
       if (stateless)
         throw GeneralError("The following quantity must be stateless: " + q.toString)
-      QSymbol(path.name.toString, path)
+      QSymbol(path.name.toString, Some(path))
     }
+      
+    // Ugly use of reflection
+    case r if r.getClass().getName().contains("RealLiterals") =>
+      QTensorVal(Nil, List(MakeRComponentFromRealTerm(r, args)))
     
     case OMA(OMID(path), tms) =>
       throw new GeneralError("Undefined operation: " + args.toString + tms.toString + path.toString())
@@ -352,7 +362,11 @@ object Quantities {
       
       
     case a => // I don't know how to match a literal term and OMLIT doesn't work. Temporarily, we assume everything else is a literal
-      QTensorVal(Nil, List(a.toString))
+      val index = args.indexWhere(x => x._1.getOrElse({throw new GeneralError("Shouldn't happen 1124")}).last.toString == a.toString)
+      if (index != -1){
+        throw new GeneralError(args(index)._2.toString)
+      }else
+        QTensorVal(Nil, List(MakeRComponentFromRealTerm(a, args)))
     
     // case t => throw new GeneralError("Couldn't match token in quantity expression:" + t.toString())
   }
