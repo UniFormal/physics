@@ -21,6 +21,9 @@ case class Formula(lhs: QStructure, rhs: QStructure, args: List[(Option[LocalNam
 abstract class MPDComponent
 
 case class GeometryDef(parent: MPath, name: LocalName, domain: GStructure) extends MPDComponent
+{
+  def path = parent ? name
+}
 
 case class GeometryDecl(parent: MPath, name: LocalName, defin: Option[GStructure]) extends MPDComponent {
   def path = parent ? name
@@ -35,7 +38,7 @@ trait MPDNode
 
 case class QuantitySequenceDecl(quantityParent: MPath, quantityName: LocalName) extends MPDComponent
 
-case class QuantityDecl(parent: MPath, name: LocalName, l: Term, geom: Option[GStructure] , dim: Term, tensRank: List[Int], df: Option[QStructure], isDiscreteSequence: Boolean, isField: Boolean, isConstant: Boolean) extends MPDComponent with MPDNode {
+case class QuantityDecl(parent: MPath, name: LocalName, l: Term, geom: Option[GStructure] , dim: Term, tensRank: List[Int], var df: Option[QStructure], isDiscreteSequence: Boolean, isField: Boolean, isConstant: Boolean) extends MPDComponent with MPDNode {
   def path = parent ? name // '?' forms global name
   def toQSymbol = QSymbol(name.toString, Some(path))
 }

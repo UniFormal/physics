@@ -31,14 +31,14 @@ object Booleans {
   case class BGreaterThanOrEqual(val x: Quantities.QStructure, val y: Quantities.QStructure) extends BStructure
   case class BLessThanOrEqual(val x: Quantities.QStructure, val y: Quantities.QStructure) extends BStructure
   
-  def MakeBooleanStructureFromTerm(p : Term, args: List[(Option[LocalName], Term)] = Nil): BStructure = p match {
+  def MakeBooleanStructureFromTerm(p : Term, args: List[(Option[LocalName], Term)]): BStructure = p match {
     case Logic.and(x, y) =>
-      BAnd(MakeBooleanStructureFromTerm(x), 
-           MakeBooleanStructureFromTerm(y))
+      BAnd(MakeBooleanStructureFromTerm(x, args), 
+           MakeBooleanStructureFromTerm(y, args))
            
     case Logic.or(x, y) =>
-      BOr(MakeBooleanStructureFromTerm(x), 
-           MakeBooleanStructureFromTerm(y))
+      BOr(MakeBooleanStructureFromTerm(x, args), 
+           MakeBooleanStructureFromTerm(y, args))
   
     case Logic._eq(t, x, y) => 
       BEqual(Quantities.MakeQuantityStructureFromTerm(x, args), 
@@ -53,7 +53,7 @@ object Booleans {
                   Quantities.MakeQuantityStructureFromTerm(y, args)))
                   
     case Logic.not(x) =>
-      BNot(MakeBooleanStructureFromTerm(x))
+      BNot(MakeBooleanStructureFromTerm(x, args))
       
     case _ =>   
       throw new GeneralError("Couldn't match token in predicate expression:" + p.toString())
@@ -363,8 +363,10 @@ object Quantities {
       
     case a => // I don't know how to match a literal term and OMLIT doesn't work. Temporarily, we assume everything else is a literal
       val index = args.indexWhere(x => x._1.getOrElse({throw new GeneralError("Shouldn't happen 1124")}).last.toString == a.toString)
+      //if (args.size > 0)
+      //  println("PODGE: " + args(0).toString())
       if (index != -1){
-        throw new GeneralError(args(index)._2.toString)
+        QSymbol(a.toString, None, true)
       }else
         QTensorVal(Nil, List(MakeRComponentFromRealTerm(a, args)))
     

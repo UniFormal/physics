@@ -7,6 +7,8 @@ import symbols._
 import archives._
 import utils._
 import objects._
+import scala.util.matching.Regex
+
  
 import info.mathhub.lf.MitM.Foundation._
 import info.mathhub.lf.MitM.Foundation.Tensors._
@@ -16,6 +18,7 @@ import info.mathhub.lf.MitM.Foundation.NatLiterals._
 import uniformal.physics.Quantities._
 import uniformal.physics.Geometries._
 import uniformal.physics.Booleans._
+import scala.io.Source
 
 class PythonExporter extends Exporter {
   override val outExt = "py"
@@ -31,6 +34,15 @@ class PythonExporter extends Exporter {
   
   private def ensureIdentifierString(s :String): String = {
     var out: String = s
+    for (c <- s.toCharArray()){
+      if (c.toInt > 127){
+        mpdtool.supportedUnicodeList.indexWhere(_.contains(c)) match {
+          case -1 => ;
+          case i => out = out.replaceAll(c.toString, mpdtool.unicodeToLatexList(i)._2) 
+          
+        }
+      } 
+    }
     if (s.headOption.getOrElse(return s).isDigit)
       out = "_"+out
     out
@@ -76,6 +88,7 @@ class PythonExporter extends Exporter {
         state + "['" + ensureIdentifierString(x) + "']"
       }
       case QSymbol(x, _, true) => ensureIdentifierString(x)
+      case QGetTensorComponent(t, i) => s"${f(t)}[${f(i)}]"
       case t => 
         throw LocalError("Match error when creating python numerical expression string:" + t)
     }
@@ -207,11 +220,11 @@ class PythonExporter extends Exporter {
     mpd.geometryDecls.map(geom => {
       var hasConstruction = true
       var descriptionString: String = ""
-      var geomLambda: Option[String] = None
+      var geomLambdaBody = "True"
       var geomLambdaArgs: Option[String] = None
       geom.defin match {
         case Some(Geometries.GConstructionFromPredicate(pred, args)) => {
-          geomLambda = Some(makePythonBooleanExpression(pred))
+          geomLambdaBody = makePythonBooleanExpression(pred)
           assert(args.size == 1)
           geomLambdaArgs = Some(ensureIdentifierString(args(0)._1.toString))
         }
@@ -221,14 +234,26 @@ class PythonExporter extends Exporter {
         }
         case None => throw new GeneralError("Geometry lacks a definition or a description: " + geom.path.toString)
       }
+      val predicateLambdaStr = {
+        if (hasConstruction)
+          (s"lambda " + 
+           {if (geomLambdaArgs != None) 
+              s"${geomLambdaArgs.get}" 
+            else 
+              ""} + 
+              s":(${geomLambdaBody})")
+        else
+          "None"
+      }
+              
       val parent = geom.path.toPath
       val name = geom.path.last
       Map(
           "name" -> s"'${name.toString}'",
           "parent" -> s"'${parent.toString}'",
-          "has_construction" -> {if (hasConstruction) "True" else "False"},
+          "has_construction" -> {if (hasConstruction) s"True ${1}" + s"df" else "False"},
           "description_string" -> s"'${descriptionString}'",
-          "geometry_mask_predicate" -> s"lambda ${geomLambdaArgs}: (${geomLambda})",
+          "geometry_mask_predicate" -> predicateLambdaStr,
           "ambient_space_grid" -> s"self.ambient_space_grid")
     })
   
@@ -255,25 +280,25 @@ ${pyIndent(2)}self.graph = ${makeGraphPy(mpd)}
 
 ${pyIndent(1)}def init_quantity_decls(self):
 ${pyIndent(2)}${quantityDeclsPyAttributes(mpd).map{
-  mp => pyObjectAssignment(s"self.quantity_decls[${mp("name")}]", "QuantityDecl", mp, 2)}.mkString("\n\n"+pyIndent(2))
+  mp => pyObjectAssignment(s"self.quantity_decls[${ensureIdentifierString(mp("name"))}]", "QuantityDecl", mp, 2)}.mkString("\n\n"+pyIndent(2))
 }
 ${pyIndent(2)}pass
 
 ${pyIndent(1)}def init_laws(self):
 ${pyIndent(2)}${lawsPyAttributes(mpd).map{
-  mp => pyObjectAssignment(s"self.laws[${mp("name")}]", "Law", mp, 2)}.mkString("\n\n"+pyIndent(2))
+  mp => pyObjectAssignment(s"self.laws[${ensureIdentifierString(mp("name"))}]", "Law", mp, 2)}.mkString("\n\n"+pyIndent(2))
 }
 ${pyIndent(2)}pass
 
 ${pyIndent(1)}def init_geometries(self):
 ${pyIndent(2)}${geometriesPyAttributes(mpd).map{
-  mp => pyObjectAssignment(s"self.geometries[${mp("name")}]", "Geometry", mp, 2)}.mkString("\n\n"+pyIndent(2))
+  mp => pyObjectAssignment(s"self.geometries[${ensureIdentifierString(mp("name"))}]", "Geometry", mp, 2)}.mkString("\n\n"+pyIndent(2))
 }
 ${pyIndent(2)}pass
 
 ${pyIndent(1)}def init_computation_steps(self):
 ${pyIndent(2)}${computationStepsPyAttributes(mpd).map{
-  mp => pyObjectAssignment(s"self.computation_steps[${mp("name")}]", "ComputationStep", mp, 2)}.mkString("\n\n"+pyIndent(2))
+  mp => pyObjectAssignment(s"self.computation_steps[${ensureIdentifierString(mp("name"))}]", "ComputationStep", mp, 2)}.mkString("\n\n"+pyIndent(2))
 }
 ${pyIndent(2)}pass
 
@@ -290,7 +315,7 @@ ${pyIndent(2)}pass
        }
        case _ => return
     }
-    
+        
     pyOpt.foreach(py => {
       println(py)
       println(bf.outFile.name)
