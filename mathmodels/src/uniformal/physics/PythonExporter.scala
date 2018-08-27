@@ -7,12 +7,18 @@ import symbols._
 import archives._
 import utils._
 import objects._
+import scala.util.matching.Regex
+
  
 import info.mathhub.lf.MitM.Foundation._
 import info.mathhub.lf.MitM.Foundation.Tensors._
 import info.mathhub.lf.MitM.Foundation.RealLiterals._
 import info.mathhub.lf.MitM.Foundation.NatLiterals._
 
+import uniformal.physics.Quantities._
+import uniformal.physics.Geometries._
+import uniformal.physics.Booleans._
+import scala.io.Source
 
 class PythonExporter extends Exporter {
   override val outExt = "py"
@@ -28,14 +34,44 @@ class PythonExporter extends Exporter {
   
   private def ensureIdentifierString(s :String): String = {
     var out: String = s
+    for (c <- s.toCharArray()){
+      if (c.toInt > 127){
+        mpdtool.supportedUnicodeList.indexWhere(_.contains(c)) match {
+          case -1 => ;
+          case i => out = out.replaceAll(c.toString, mpdtool.unicodeToLatexList(i)._2) 
+          
+        }
+      } 
+    }
     if (s.headOption.getOrElse(return s).isDigit)
       out = "_"+out
     out
   }
   
-  def makePythonExpression(qElement: QElement, state: String): (String, List[QSymbol])= {
+  def makePythonBooleanExpression(b: BStructure): String = {
+    b match {
+      case BAnd(x, y) => s"(${makePythonBooleanExpression(x)} and ${makePythonBooleanExpression(y)})"
+      case BOr(x, y) => s"(${makePythonBooleanExpression(x)} or ${makePythonBooleanExpression(y)})"
+      case BEqual(x, y) => s"(${makePythonNumericalExpression(x, "state")._1} == ${makePythonNumericalExpression(y, "state")._1})"
+      case BGreaterThanOrEqual(x, y) => s"(${makePythonNumericalExpression(x, "state")._1} >= ${makePythonNumericalExpression(y, "state")._1})"
+      case BLessThanOrEqual(x, y) => s"(${makePythonNumericalExpression(x, "state")._1} <= ${makePythonNumericalExpression(y, "state")._1})"
+      case t => 
+        throw LocalError("Match error when creating python boolean expression string:" + t)
+    }
+  }
+  
+  def makePyRString(rComponent: RComponent): String = rComponent match {
+    case RTimes(x, y) => s"(${makePyRString(x)} * ${makePyRString(y)})"
+    case RTimes10ToThePower(x, y) => s"(${makePyRString(x)} * (10.0 ** ${makePyRString(y)}))"
+    case RNeg(x) => s"(-${makePyRString(x)})"
+    case QTensorRealString(x) => x
+    case QSymbol(name, _, _) => ensureIdentifierString(name)
+    case _ => throw LocalError("Match error when creating python numerical expression string for tensor component:" + rComponent.toString)
+  }
+  
+  def makePythonNumericalExpression(qElement: QStructure, state: String): (String, List[QSymbol])= {
     var params: List[QSymbol] = Nil
-    def f(q: QElement):String = q match {
+    def f(q: QStructure):String = q match {
       case QMul(x, y) => s"(${f(x)} * ${f(y)})"
       case QDiv(x, y) => s"(${f(x)} / ${f(y)})"
       case QAdd(x, y) => s"(${f(x)} + ${f(y)})"
@@ -43,21 +79,23 @@ class PythonExporter extends Exporter {
       case QNeg(x) => s"(- ${f(x)})"
       case QExp(x) => s"numpy.exp(${f(x)})"
       case QLog(x) => s"numpy.log(${f(x)})"
-      case QGradient(x) => s"gradient(${f(x)}, self.space)"   
-      case QDivergence(x) => s"divergence(${f(x)}, self.space)" 
-      case QTensorVal(l, lr) => s"${makePyTensor(l, lr)}"
-      case QSymbol(x, _) => {
+      case QGradient(x) => s"gradient(${f(x)}, self.ambient_space_grid)"   
+      case QDivergence(x) => s"divergence(${f(x)}, self.ambient_space_grid)" 
+      case QTensorVal(l, lr) => s"${makePyTensor(l, lr.map(makePyRString(_)))}"
+      case QAbs(x) => s"numpy.abs(${f(x)})"
+      case QSymbol(x, _, false) => {
         params ::= q.asInstanceOf[QSymbol]
         state + "['" + ensureIdentifierString(x) + "']"
       }
-      case t => throw LocalError("Match Error:" + t)
+      case QSymbol(x, _, true) => ensureIdentifierString(x)
+      case QGetTensorComponent(t, i) => s"${f(t)}[${f(i)}]"
+      case t => 
+        throw LocalError("Match error when creating python numerical expression string:" + t)
     }
     (f(qElement), params.distinct)
   }
   
-  private def makePyTensor(tensorRankList: Term, tensorElementsList: Term): String = {
-    val tensorRankDims = makeListFromListTerm(tensorRankList).map(s => s.toInt)
-    val tensorElements = makeListFromListTerm(tensorElementsList)
+  private def makePyTensor(tensorRankDims: List[Int], tensorElements: List[String]): String = {
     val numberOfElementsRequired = tensorRankDims.foldRight(1){(acc, i)=>(acc *(i)) }
     if (numberOfElementsRequired != tensorElements.size)
        throw new GeneralError("Tensor rank incompatable with number of elements: " + numberOfElementsRequired.toString)
@@ -68,22 +106,6 @@ class PythonExporter extends Exporter {
       }
     }
     s"numpy.array(${form_tensor_recursive(tensorElements, tensorRankDims)})"
-  }
-  
-  private def makeListFromListTerm(l: Term): List[String] = {
-    def get_list_recursive(t: Term, tail: List[String]) : List[String] = {
-      t match {
-        case tcons(a, x, b) => {
-          a match {
-            case real_underscore_lit(e) => get_list_recursive(b, (makeRealStringFromRealTerm(x))::tail)
-            case nat_underscore_lit(e) => get_list_recursive(b, (x.toString)::tail)
-          }
-        }
-        case rnil(p) => return tail
-        case nnil(p) => return tail
-      }
-    }
-    get_list_recursive(l, Nil)
   }
   
   private def makeRealStringFromRealTerm(r:Term): String = {
@@ -99,17 +121,13 @@ class PythonExporter extends Exporter {
       case a => a.toString
     }
   }
-  
-  private def makeExpressionPyLambda(state: String , qexpr: QuantityExpression): String = 
-    s"lambda $state: ${makeExpressionPyLambda(state, qexpr.expr)}"
-  
-  private def makeExpressionPyLambda(state: String, value: Term): String = {
-    val expr = new QuantityExpression(value)
-    makeExpressionPyLambda(state, expr)
+    
+  private def makeExpressionPyLambda(state: String, value: Term, args: List[(Option[LocalName], Term)]): String = {
+    makeExpressionPyLambda(state, MakeQuantityStructureFromTerm(value, args))
   }
   
-  private def makeExpressionPyLambda(state: String, expr: QElement): String =
-        s"lambda $state: ${makePythonExpression(expr, state)._1}"
+  private def makeExpressionPyLambda(state: String, expr: QStructure): String =
+        s"lambda $state: ${makePythonNumericalExpression(expr, state)._1}"
 
   
   private def makeFunctionalGraphPy(mpd: MPD): String = {
@@ -130,9 +148,8 @@ class PythonExporter extends Exporter {
   private def getObjectListPy(list: List[String]): String = 
     list.mkString("[", " ,", "]")
     
-  private def makeConstQuantityExpression(value: Term): String = {
-    val expr = new QuantityExpression(value, true)
-    makePythonExpression(expr.expr, "")._1
+  private def makeConstQuantityExpression(value: QStructure): String = {
+    makePythonNumericalExpression(value, "")._1
   }
     
   private def quantityDeclsPyAttributes(mpd: MPD) = {
@@ -144,12 +161,13 @@ class PythonExporter extends Exporter {
             case OMS(p) => s"'${p.name.toString}'"
             case _ => "''"
           }),
-          "is_uniform" -> {if (q.isUniform) "True" else "False"} ,
+          "is_field" -> {if (q.isField) "True" else "False"} ,
           "is_constant" -> {if (q.isConstant) "True" else "False"},
+          "is_sequence" -> {if (q.isDiscreteSequence) " True" else "False"},
           "tensor_shape" -> s"[${q.tensRank.mkString(",")}]"
       )
       if (q.df != None)
-        (parameters:+("initial_value" -> makeConstQuantityExpression(q.df.get.value))).toMap
+        (parameters:+("initial_value" -> makeConstQuantityExpression(q.df.get))).toMap
       else  
         parameters.toMap
     })
@@ -157,10 +175,8 @@ class PythonExporter extends Exporter {
     
   private def lawsPyAttributes(mpd: MPD) = 
     mpd.laws.map(l => {
-      val lawLhsExpr = new QuantityExpression(l.formula.lhs)
-      val (lhsStr, lhsParams) = makePythonExpression(lawLhsExpr.expr, "state")
-      val lawRhsExpr = new QuantityExpression(l.formula.rhs)
-      val (rhsStr, rhsParams) = makePythonExpression(lawRhsExpr.expr, "state")
+      val (lhsStr, lhsParams) = makePythonNumericalExpression(l.formula.lhs, "state")
+      val (rhsStr, rhsParams) = makePythonNumericalExpression(l.formula.rhs, "state")
       val out = Map(
           "name" -> s"'${l.name.toString}'",
           "parent" -> s"'${l.parent.toString}'",
@@ -177,7 +193,7 @@ class PythonExporter extends Exporter {
   private def computationStepsPyAttributes(mpd: MPD) = 
     mpd.computationSteps.map(bstp => {
       val substepsLambdas = bstp.steps.map(stp => {
-          val (stpStr, params) = makePythonExpression(stp.toRule(None).get.solution, "state")
+          val (stpStr, params) = makePythonNumericalExpression(stp.toRule(None).get.solution, "state")
           s"lambda state: (${stpStr})"
         }
       ).mkString("[", ",", "]")
@@ -185,7 +201,7 @@ class PythonExporter extends Exporter {
         s"('${stp.law.name.toString}', '${stp.quantityDecl.name.toString}')"
       ).mkString("[", ",", "]")
       val stpExpression = bstp.toRule(None).get.solution
-      val (stpStr, params) = makePythonExpression(stpExpression, "state")
+      val (stpStr, params) = makePythonNumericalExpression(stpExpression, "state")
       val parent = bstp.path.get.toPath
       val name = bstp.path.get.last
       Map(
@@ -198,6 +214,47 @@ class PythonExporter extends Exporter {
           "law_quantity_pairs" -> lawQuantityNamePairs,
           "is_cyclic" -> {if (bstp.cyclic) "True" else "False"},
           "is_connected" -> {if (bstp.isConnected) "True" else "False"})
+    })
+    
+  private def geometriesPyAttributes(mpd: MPD) = 
+    mpd.geometryDecls.map(geom => {
+      var hasConstruction = true
+      var descriptionString: String = ""
+      var geomLambdaBody = "True"
+      var geomLambdaArgs: Option[String] = None
+      geom.defin match {
+        case Some(Geometries.GConstructionFromPredicate(pred, args)) => {
+          geomLambdaBody = makePythonBooleanExpression(pred)
+          assert(args.size == 1)
+          geomLambdaArgs = Some(ensureIdentifierString(args(0)._1.toString))
+        }
+        case Some(Geometries.GConstructionFromDescription(s)) => {
+          hasConstruction = false
+          descriptionString = s
+        }
+        case None => throw new GeneralError("Geometry lacks a definition or a description: " + geom.path.toString)
+      }
+      val predicateLambdaStr = {
+        if (hasConstruction)
+          (s"lambda " + 
+           {if (geomLambdaArgs != None) 
+              s"${geomLambdaArgs.get}" 
+            else 
+              ""} + 
+              s":(${geomLambdaBody})")
+        else
+          "None"
+      }
+              
+      val parent = geom.path.toPath
+      val name = geom.path.last
+      Map(
+          "name" -> s"'${name.toString}'",
+          "parent" -> s"'${parent.toString}'",
+          "has_construction" -> {if (hasConstruction) s"True ${1}" + s"df" else "False"},
+          "description_string" -> s"'${descriptionString}'",
+          "geometry_mask_predicate" -> predicateLambdaStr,
+          "ambient_space_grid" -> s"self.ambient_space_grid")
     })
   
   def pyObjectAssignment(lhs: String, objname: String, attrs: Map[String, String], currentIndentLevel: Int): String = {
@@ -223,18 +280,27 @@ ${pyIndent(2)}self.graph = ${makeGraphPy(mpd)}
 
 ${pyIndent(1)}def init_quantity_decls(self):
 ${pyIndent(2)}${quantityDeclsPyAttributes(mpd).map{
-  mp => pyObjectAssignment(s"self.quantity_decls[${mp("name")}]", "QuantityDecl", mp, 2)}.mkString("\n\n"+pyIndent(2))
+  mp => pyObjectAssignment(s"self.quantity_decls[${ensureIdentifierString(mp("name"))}]", "QuantityDecl", mp, 2)}.mkString("\n\n"+pyIndent(2))
 }
+${pyIndent(2)}pass
 
 ${pyIndent(1)}def init_laws(self):
 ${pyIndent(2)}${lawsPyAttributes(mpd).map{
-  mp => pyObjectAssignment(s"self.laws[${mp("name")}]", "Law", mp, 2)}.mkString("\n\n"+pyIndent(2))
+  mp => pyObjectAssignment(s"self.laws[${ensureIdentifierString(mp("name"))}]", "Law", mp, 2)}.mkString("\n\n"+pyIndent(2))
 }
+${pyIndent(2)}pass
+
+${pyIndent(1)}def init_geometries(self):
+${pyIndent(2)}${geometriesPyAttributes(mpd).map{
+  mp => pyObjectAssignment(s"self.geometries[${ensureIdentifierString(mp("name"))}]", "Geometry", mp, 2)}.mkString("\n\n"+pyIndent(2))
+}
+${pyIndent(2)}pass
 
 ${pyIndent(1)}def init_computation_steps(self):
 ${pyIndent(2)}${computationStepsPyAttributes(mpd).map{
-  mp => pyObjectAssignment(s"self.computation_steps[${mp("name")}]", "ComputationStep", mp, 2)}.mkString("\n\n"+pyIndent(2))
+  mp => pyObjectAssignment(s"self.computation_steps[${ensureIdentifierString(mp("name"))}]", "ComputationStep", mp, 2)}.mkString("\n\n"+pyIndent(2))
 }
+${pyIndent(2)}pass
 
 """
 
@@ -249,7 +315,7 @@ ${pyIndent(2)}${computationStepsPyAttributes(mpd).map{
        }
        case _ => return
     }
-    
+        
     pyOpt.foreach(py => {
       println(py)
       println(bf.outFile.name)
@@ -262,5 +328,5 @@ ${pyIndent(2)}${computationStepsPyAttributes(mpd).map{
   
   def exportDocument(doc: Document, bf: BuildTask) {}
   
-  def exportView(view: DeclaredView, bf: BuildTask) {}
+  def exportView(view: DeclaredView, bf: BuildTask) {} 
 }
