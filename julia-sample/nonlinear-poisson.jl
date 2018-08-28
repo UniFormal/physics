@@ -13,6 +13,8 @@ using LinearAlgebra
 #
 # Structure containing "physics" information
 #
+#  - \nabla \eps  \nabla u + nonlinearity(u) = source(x)
+#
 struct Physics
   eps::Float64 # dielectric constant
   dirichlet_values::Array{Float64,1} # boundary values
@@ -25,22 +27,30 @@ end
 # Structure for discrete geometry (for finite volume method)
 # This can be easily generalized to higher dimensions 
 # and unstructured grids
+# 
+# This is a graph embedded in R^d (d=1,2,3) with edge weights and node weights
+# which can be generated from discretization grids in 1D/2D/3D
+#
 struct DiscreteGeometry
     SpaceDim::Int32
     GridDim::Int32
-    Points::Array{Float64,2}
-    Edges::Array{Int32,2}
-    EdgeFactors::Array{Float64,1}
-    NodeFactors::Array{Float64,1}
-    BPoints::Array{Int32,1}
+    Points::Array{Float64,2} # point coordinates.
+    Edges::Array{Int32,2} # index array pointing into points list
+    EdgeFactors::Array{Float64,1} # interface area / edge length
+    NodeFactors::Array{Float64,1} # control volume sizes
+    BPoints::Array{Int32,1} # indices of dirichlet points 
 
     # Constructor for 1D discrete geometry
     function DiscreteGeometry(n,xl,xr)
+    #  Primal Grid:
+    #  o-----o-----o-----o-----o-----o-----o-----o-----o
+    # Dual grid with control volumes
+    #  |--|-----|-----|-----|-----|-----|-----|-----|--|
         pts=reshape(collect(range(xl,stop=xr,length=n)),n,1)
         eds=zeros(Int32,n-1,2)
         efac=zeros(n-1)
         nfac=zeros(n)
-        for i=1:n-1
+        for i=1:n-1 # loop over edges
             eds[i,1]=i
             eds[i,2]=i+1
             h=pts[i+1]-pts[i]
@@ -79,7 +89,10 @@ function solve(geom,physics;control=NewtonControl())
     function eval_and_assemble(geom,physics,M,U,F)
         nnodes=geom.GridDim
         nedges=size(geom.Edges,1)
-
+    #  for K=1...n
+    #  f_K = sum_(L neigbor of K) eps (U[K]-U[L])*edgefac[K,L]
+    #        + (nonlinearity(U[K])- source(X[K]))*nodefac[K]
+    # M is correspondig Jacobi matrix of derivatives. 
         # Reset matrix
         for i=1:nedges
             K=geom.Edges[i,1]
@@ -126,10 +139,10 @@ function solve(geom,physics;control=NewtonControl())
     M=SparseArrays.spzeros(n,n) # Jacobi matrix
     U=zeros(n) # Solution vector
     F=zeros(n) # Vector holding residual
-    converged=false
 
     # Newton iteration (quick and dirty...)
     oldnorm=1.0
+    converged=false
     for ii=1:control.maxiter
         eval_and_assemble(geom,physics,M,U,F)
         
@@ -139,7 +152,7 @@ function solve(geom,physics;control=NewtonControl())
         lufact=LinearAlgebra.lu(M)
         
         # LU triangular solve gives Newton update
-        DU=lufact\F
+        DU=lufact\F # DU is the Newton update
 
         U=U-control.damp*DU
 
@@ -191,8 +204,8 @@ args = parse_args(argdef)
 
 
 const n=args["n"]
-const xl=0.0
-const xr=1.0
+const xl=0.0  # left interval boundary
+const xr=1.0  # right interval boundary
 const eps=1.0
 const dirichlet_values=[1.0,0.0]
 
@@ -214,9 +227,7 @@ geom=DiscreteGeometry(n,xl,xr)
 physics=Physics(eps,dirichlet_values,nonlinearity,source)
 
 
-
 U=solve(geom,physics)
-
 
 # plotting
 if args["vispy"]
