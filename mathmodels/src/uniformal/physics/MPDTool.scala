@@ -219,7 +219,7 @@ class MPDTool(controller: Controller) {
         }
   }
      
-  def getMPDComponentsFromTheory(thy: DeclaredTheory) : List[MPDComponent] = {
+  def getMPDComponentsFromTheory(thy: Theory) : List[MPDComponent] = {
     var comps: List[MPDComponent] = Nil
     thy.getDeclarations foreach {
       case c: Constant => {println(c)
@@ -227,7 +227,7 @@ class MPDTool(controller: Controller) {
         if (comp != None) comps ::= comp.get}
       case Include(_, from, _) => {
         if (from.parent.toString == "http://mathhub.info/MitM/Models")
-          comps ++= getMPDComponentsFromTheory(controller.get(from).asInstanceOf[DeclaredTheory])
+          comps ++= getMPDComponentsFromTheory(controller.getAs(classOf[Theory], from)
       }
       case _ => throw new GeneralError("Unsupported construct for mpd theory")
     }
@@ -235,14 +235,14 @@ class MPDTool(controller: Controller) {
   }
    
   def toMPD(p: MPath): Option[MPD] = {
-    val thy = controller.get(p).asInstanceOf[DeclaredTheory]
+    val thy = controller.getAs(classOf[Theory], p)
     thy.meta match {
       case Some(x) if x.toString() == "http://mathhub.info/MitM/Models?MPD" => toMPD(thy)
       case _ => throw new GeneralError("Error: Theory must be a meta theory of http://mathhub.info/MitM/Models?MPD")
     }
   }
   
-  def toMPD(thy: DeclaredTheory): Option[MPD] = {
+  def toMPD(thy: Theory): Option[MPD] = {
     val meta = thy.meta.getOrElse(return None)
     println(meta)
     if (meta.toString() != "http://mathhub.info/MitM/Foundation/Units?ModelBase")

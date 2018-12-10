@@ -307,7 +307,7 @@ ${pyIndent(2)}pass
     Some(py)
   }
   
-  def exportTheory(thy: DeclaredTheory, bf: BuildTask) {
+  def exportTheory(thy: Theory, bf: BuildTask) {
     println(thy.name)
     val pyOpt = thy.meta match {
        case Some(x) if x.toString() == "http://mathhub.info/MitM/Foundation/Units?ModelBase" => {
@@ -328,5 +328,5 @@ ${pyIndent(2)}pass
   
   def exportDocument(doc: Document, bf: BuildTask) {}
   
-  def exportView(view: DeclaredView, bf: BuildTask) {} 
+  def exportView(view: View, bf: BuildTask) {} 
 }

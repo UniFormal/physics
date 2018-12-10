@@ -16,7 +16,7 @@ class MPDStatsExporter extends Exporter {
     m
    }
    
-   def exportTheory(thy: DeclaredTheory, bf: BuildTask) { 
+   def exportTheory(thy: Theory, bf: BuildTask) { 
     val statsOpt = thy.meta match {
        case Some(x) if x.toString() == "http://mathhub.info/MitM/Foundation/Units?ModelBase" => {
          mpdtool.toMPD(thy).get.prettyListCycles             
@@ -34,5 +34,5 @@ class MPDStatsExporter extends Exporter {
   
   def exportDocument(doc: Document, bf: BuildTask) {}
   
-  def exportView(view: DeclaredView, bf: BuildTask) {}
+  def exportView(view: View, bf: BuildTask) {}
 }
